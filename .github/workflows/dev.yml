@@ -2,8 +2,13 @@ name: Developer Agent
 on:
   issues:
     types: [labeled]
+  pull_request:
+    # SA blocks via the `changes-requested` LABEL, not a review: SA and Dev are
+    # the same GitHub App, and GitHub forbids requesting changes on your own PR,
+    # so a pull_request_review trigger can never fire in this loop.
+    types: [labeled]
   pull_request_review:
-    types: [submitted]
+    types: [submitted]   # kept for the day agents get distinct identities
 concurrency:
   # Scope per triggering issue/PR, NOT one global group. A single global group
   # only keeps one running + one pending run; every extra label event is
@@ -23,6 +28,8 @@ jobs:
       (github.event_name == 'issues' &&
         (github.event.label.name == 'ready-for-dev' ||
          github.event.label.name == 'ready-for-fix')) ||
+      (github.event_name == 'pull_request' &&
+        github.event.label.name == 'changes-requested') ||
       (github.event_name == 'pull_request_review' &&
         github.event.review.state == 'changes_requested')
     runs-on: ubuntu-latest

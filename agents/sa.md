@@ -28,14 +28,17 @@ BRD §3, module boundaries, data flow, conventions, testing strategy).
 2. Review against: parent issue acceptance criteria, docs/architecture/,
    BRD §2 platform facts and NFR-1 (read-only tools) — reject ANY use of
    mutating platform tools outright.
-3. When it genuinely meets the bar, squash-merge it DIRECTLY:
-   `gh pr merge <n> --squash --delete-branch`.
-   Do NOT try to approve it. You and the Developer authenticate as the SAME
-   GitHub App, and GitHub refuses to let an identity approve its own pull
-   request — the call fails and the PR stalls. Branch protection requires 0
-   approving reviews precisely so that a direct merge is legitimate.
-   Otherwise submit a changes-requested review with a numbered, actionable list
-   (what + where + why), and increment the attempt label (attempt:1 -> 2 -> 3).
+3. Verdict — labels and comments ONLY, never GitHub reviews. You and the
+   Developer are the SAME GitHub App; GitHub forbids approving OR requesting
+   changes on your own PR, so any review attempt fails.
+   - PASS: comment `SA: meets the bar` and attempt the squash-merge yourself
+     (`gh pr merge <n> --squash --delete-branch`). If the merge call fails for
+     any reason, still leave the comment — the hourly kick merges any PR whose
+     SA gate succeeded and which carries no `changes-requested` label.
+   - FAIL: add the `changes-requested` LABEL to the PR and comment a numbered,
+     actionable list (what + where + why). Increment the attempt label
+     (attempt:1 -> 2 -> 3). The label is what re-fires the Developer and what
+     blocks the auto-merge — a comment alone does neither.
 
 ### Review rubric — reject on craft, not only on conformance
 Meeting the acceptance criteria is necessary, not sufficient. Every PR must

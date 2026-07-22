@@ -88,15 +88,27 @@ jobs:
           for n in $(gh pr list --repo "$REPO" --state open --limit 50 \
                        --json number,isDraft --jq '.[] | select(.isDraft | not) | .number'); do
             pr=$(gh api "repos/$REPO/pulls/$n")
-            ms=$(echo "$pr" | jq -r .mergeable_state)
-            if [ "$ms" != "clean" ]; then
-              echo "PR #$n: mergeable_state=$ms — skip"; continue
+            # SA blocks via the changes-requested LABEL (same-App identity makes
+            # blocking reviews impossible), so that label is the veto signal.
+            veto=$(echo "$pr" | jq -r '[.labels[].name | select(. == "changes-requested")] | length')
+            if [ "$veto" != "0" ]; then
+              echo "PR #$n: changes-requested label — SA blocked it, skip"; continue
             fi
-            # any blocking review?
-            blocked=$(gh api "repos/$REPO/pulls/$n/reviews" \
-                        --jq '[.[] | select(.state == "CHANGES_REQUESTED")] | length')
-            if [ "$blocked" != "0" ]; then
-              echo "PR #$n: has changes-requested review — SA blocked it, skip"; continue
+            ms=$(echo "$pr" | jq -r .mergeable_state)
+            if [ "$ms" = "dirty" ]; then
+              # Real merge conflict. Route it to the Developer as rework: the
+              # changes-requested label fires dev.yml, and the comment tells it
+              # what to do. Without this, conflicted PRs sat forever (no trigger).
+              if [ "$(gh api "repos/$REPO/issues/$n/comments" --jq '[.[] | select(.body | startswith("Merge conflict with main"))] | length')" = "0" ]; then
+                gh api -X POST "repos/$REPO/issues/$n/comments" \
+                  -f body="Merge conflict with main. Developer: merge origin/main into this branch, resolve the conflicts faithfully to both sides' intent, push, then remove the changes-requested label." >/dev/null 2>&1
+              fi
+              gh issue edit "$n" --repo "$REPO" --add-label changes-requested >/dev/null 2>&1 \
+                && echo "PR #$n: dirty — labelled changes-requested to route conflict to Developer"
+              continue
+            fi
+            if [ "$ms" != "clean" ]; then
+              echo "PR #$n: mergeable_state=$ms — skip (transient, next hour)"; continue
             fi
             # escalated?
             esc=$(gh api "repos/$REPO/issues/$n" \
@@ -165,6 +177,15 @@ jobs:
           for label in ready-for-fix ready-for-dev; do
             num="$(pick "$label" || true)"
             if [ -n "${num:-}" ]; then
+              # Guard against the pick->merge race: an earlier step of this same
+              # kick run may have merged a PR that closed this issue seconds ago.
+              # Re-firing a closed issue sends an Opus Dev off to re-implement
+              # already-merged work.
+              if [ "$(gh api "repos/$REPO/issues/$num" --jq .state)" != "open" ]; then
+                echo "Issue #$num closed since selection — stripping stale '$label' label instead."
+                gh issue edit "$num" --repo "$REPO" --remove-label "$label" >/dev/null 2>&1 || true
+                continue
+              fi
               echo "Re-firing issue #$num via label '$label'."
               gh issue edit "$num" --repo "$REPO" --remove-label "$label"
               sleep 5   # let the removal register as its own event
