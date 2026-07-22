@@ -1,0 +1,116 @@
+name: Kick (drain the ready queue)
+# The loop is event-driven: the Developer fires on `issues: labeled`. If several
+# items are labelled while it is busy, the dev-agent concurrency group keeps only
+# one pending run and drops the rest, so those items sit until the nightly sweep
+# notices them 24h later. This job re-fires ONE queued item per hour when the
+# Developer is genuinely idle, turning the queue into something that drains.
+#
+# Deliberately plain gh + bash, not a Claude agent: it is pure bookkeeping and
+# should not consume Claude subscription usage.
+on:
+  schedule:
+    - cron: "15 * * * *"   # hourly, at :15 past
+  workflow_dispatch: {}
+concurrency:
+  group: kick
+  cancel-in-progress: false
+permissions:
+  contents: read
+  issues: write
+jobs:
+  kick:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - name: Re-fire SA review on PRs left unreviewed
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          # SA polls CI when it starts. If CI has not concluded yet it exits,
+          # and no `pull_request` event ever fires again for that PR — so the
+          # review never happens. This re-fires it once CI has actually settled.
+          for n in $(gh pr list --repo "$REPO" --state open --limit 50 \
+                       --json number,isDraft --jq '.[] | select(.isDraft | not) | .number'); do
+            if [ "$(gh api "repos/$REPO/pulls/$n/reviews" --jq 'length')" != "0" ]; then
+              echo "PR #$n: already reviewed."
+              continue
+            fi
+            sha=$(gh pr view "$n" --repo "$REPO" --json headRefOid --jq .headRefOid)
+            state=$(gh api "repos/$REPO/commits/$sha/check-runs" \
+                      --jq '[.check_runs[]] as $c
+                            | if   ($c | length) == 0                    then "none"
+                              elif ($c | any(.status != "completed"))    then "pending"
+                              else "settled" end')
+            echo "PR #$n: no review, CI=$state"
+            if [ "$state" = "settled" ]; then
+              gh issue edit "$n" --repo "$REPO" --remove-label needs-review >/dev/null 2>&1 || true
+              sleep 3
+              gh issue edit "$n" --repo "$REPO" --add-label needs-review >/dev/null 2>&1 \
+                && echo "  -> re-fired SA review for #$n"
+            fi
+          done
+
+      - name: Re-fire one queued item if the Developer is idle
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # 1. Never stack on a running Developer — the dev-agent concurrency
+          #    group would just cancel whatever we trigger.
+          active=$(gh run list --repo "$REPO" --workflow=dev.yml --limit 15 \
+                     --json status \
+                     --jq '[.[] | select(.status == "in_progress" or .status == "queued")] | length')
+          if [ "$active" != "0" ]; then
+            echo "Developer has $active active run(s) — nothing to do."
+            exit 0
+          fi
+
+          # 2. Never re-fire while an item is claimed; that claim is the lock.
+          claimed=$(gh issue list --repo "$REPO" --label in-progress --state open \
+                      --json number --jq 'length')
+          if [ "$claimed" != "0" ]; then
+            echo "$claimed issue(s) still claimed (in-progress) — nothing to do."
+            exit 0
+          fi
+
+          # 3. Choose one eligible issue: unassigned, and not blocked / escalated.
+          #    Bugs before features; within each, P0 then P1 then P2 then the rest;
+          #    oldest first so nothing starves.
+          pick() {
+            gh issue list --repo "$REPO" --label "$1" --state open --limit 100 \
+              --json number,labels,createdAt,assignees \
+              --jq '[ .[]
+                      | select((.assignees | length) == 0)
+                      | select([.labels[].name]
+                          | any(. == "blocked" or . == "escalation:human" or . == "in-progress")
+                          | not)
+                      | {number, createdAt, prio:
+                          ( [.labels[].name] as $l
+                            | if   ($l | index("P0")) then 0
+                              elif ($l | index("P1")) then 1
+                              elif ($l | index("P2")) then 2
+                              else 3 end ) } ]
+                    | sort_by(.prio, .createdAt) | .[0].number // empty'
+          }
+
+          for label in ready-for-fix ready-for-dev; do
+            num="$(pick "$label" || true)"
+            if [ -n "${num:-}" ]; then
+              echo "Re-firing issue #$num via label '$label'."
+              gh issue edit "$num" --repo "$REPO" --remove-label "$label"
+              sleep 5   # let the removal register as its own event
+              gh issue edit "$num" --repo "$REPO" --add-label "$label"
+              echo "Done — the Developer workflow should now trigger for #$num."
+              exit 0
+            fi
+          done
+
+          echo "Queue is empty: nothing ready, unassigned and unblocked."
