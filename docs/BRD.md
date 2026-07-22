@@ -48,9 +48,14 @@ These are engineering law. Every sync-related task inherits them as acceptance c
 - Frontend: React, static build, deployed to GitHub Pages.
 - Backend: **Python** on Cloudflare Workers (Python Workers, `pywrangler`
   workflow), FastAPI for routing.
-- LLM: LangChain `init_chat_model`, provider-agnostic; default provider
-  **OpenAI** via `OPENAI_API_KEY`. No provider-specific SDK calls outside the
-  LangChain abstraction.
+- LLM: LangChain `init_chat_model`, provider-agnostic; provider is
+  **Azure OpenAI**, initialised as `init_chat_model("azure_openai:<deployment>")`.
+  Worker secrets: `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`,
+  `OPENAI_API_VERSION`, `AZURE_OPENAI_DEPLOYMENT`. No provider-specific SDK
+  calls outside the LangChain abstraction — swapping providers must remain a
+  configuration change, not a code change.
+  Note: this is the *product's* LLM only. The agent loop that builds this repo
+  runs on `ANTHROPIC_API_KEY` (claude-code-action) and is unrelated.
 - Database: Supabase (Postgres). Backend talks to Supabase over its REST API
   (PostgREST) — do not assume `supabase-py` works under Pyodide.
 - Sync: Cloudflare Cron Triggers on the Worker, daily minimum.

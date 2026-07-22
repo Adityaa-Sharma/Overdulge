@@ -22,8 +22,12 @@ Humans own: this kit's files, secrets, escalations, and platform OTP logins.
 ### 3. Remaining secrets (Settings → Secrets and variables → Actions)
 - [ ] `ANTHROPIC_API_KEY` — powers all agents (claude-code-action).
 - [ ] `CLOUDFLARE_API_TOKEN` (Workers deploy scope) + `CLOUDFLARE_ACCOUNT_ID`.
-- [ ] `OPENAI_API_KEY` — the product's LLM (used by the Worker, set later as a
-      Worker secret too during scaffolding; kept here for CI/QA needs).
+- [ ] Azure OpenAI — the product's LLM (used by the Worker, set later as Worker
+      secrets too during scaffolding; kept here for CI/QA needs):
+      `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `OPENAI_API_VERSION`,
+      `AZURE_OPENAI_DEPLOYMENT`.
+      Note: this powers the *product*, not the agents. The agent loop runs on
+      `ANTHROPIC_API_KEY` — Azure OpenAI cannot drive claude-code-action.
 - [ ] Supabase: create free project; note URL + anon key + service-role key.
       These become Worker secrets during scaffolding (task will specify).
 
