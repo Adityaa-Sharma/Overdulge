@@ -32,23 +32,38 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -uo pipefail
-          # SA polls CI when it starts. If CI has not concluded yet it exits,
-          # and no `pull_request` event ever fires again for that PR — so the
-          # review never happens. This re-fires it once CI has actually settled.
+          # An unreviewed open PR is stuck for one of two reasons:
+          #  a) SA ran before CI concluded and exited (no event brings it back), or
+          #  b) the PR branch forked before an agents/sa.md or workflow change, so
+          #     SA keeps reviewing with STALE instructions (sa-review.yml checks
+          #     out the PR head SHA). Toggling a label does not help (b) — the
+          #     re-run still reads the stale branch.
+          # Updating the branch fixes BOTH: it merges main in (bringing the current
+          # sa.md + workflows into the PR) and fires a fresh pull_request event.
           for n in $(gh pr list --repo "$REPO" --state open --limit 50 \
                        --json number,isDraft --jq '.[] | select(.isDraft | not) | .number'); do
             if [ "$(gh api "repos/$REPO/pulls/$n/reviews" --jq 'length')" != "0" ]; then
               echo "PR #$n: already reviewed."
               continue
             fi
-            sha=$(gh pr view "$n" --repo "$REPO" --json headRefOid --jq .headRefOid)
+            behind=$(gh api "repos/$REPO/pulls/$n" --jq '.base.ref as $b | .head.sha' >/dev/null 2>&1; \
+                     gh api "repos/$REPO/pulls/$n" --jq \
+                       'if .mergeable_state == "behind" or .mergeable_state == "dirty" then "behind" else "current" end')
+            sha=$(gh api "repos/$REPO/pulls/$n" --jq '.head.sha')
             state=$(gh api "repos/$REPO/commits/$sha/check-runs" \
-                      --jq '[.check_runs[]] as $c
-                            | if   ($c | length) == 0                    then "none"
-                              elif ($c | any(.status != "completed"))    then "pending"
+                      --jq '[.check_runs[] | select(.name != "review")] as $c
+                            | if   ($c | length) == 0                 then "none"
+                              elif ($c | any(.status != "completed")) then "pending"
                               else "settled" end')
-            echo "PR #$n: no review, CI=$state"
-            if [ "$state" = "settled" ]; then
+            echo "PR #$n: no review, CI=$state, branch=$behind"
+            if [ "$behind" = "behind" ]; then
+              # Pull latest main (and current instructions) into the PR; this
+              # re-triggers CI + SA on a fresh commit.
+              if gh api -X PUT "repos/$REPO/pulls/$n/update-branch" >/dev/null 2>&1; then
+                echo "  -> updated branch for #$n (brings in current sa.md + re-fires SA)"
+              fi
+            elif [ "$state" = "settled" ]; then
+              # Branch is current but SA still never reviewed — re-fire via label.
               gh issue edit "$n" --repo "$REPO" --remove-label needs-review >/dev/null 2>&1 || true
               sleep 3
               gh issue edit "$n" --repo "$REPO" --add-label needs-review >/dev/null 2>&1 \
