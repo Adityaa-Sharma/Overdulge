@@ -48,12 +48,14 @@ These are engineering law. Every sync-related task inherits them as acceptance c
 - Frontend: React, static build, deployed to GitHub Pages.
 - Backend: **Python** on Cloudflare Workers (Python Workers, `pywrangler`
   workflow), FastAPI for routing.
-- LLM: LangChain `init_chat_model`, provider-agnostic; provider is
-  **Azure OpenAI**, initialised as `init_chat_model("azure_openai:<deployment>")`.
-  Worker secrets: `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`,
-  `OPENAI_API_VERSION`, `AZURE_OPENAI_DEPLOYMENT`. No provider-specific SDK
-  calls outside the LangChain abstraction — swapping providers must remain a
-  configuration change, not a code change.
+- LLM: LangChain `init_chat_model`, provider-agnostic. Current provider is
+  **Groq**, initialised as `init_chat_model("groq:<model>")` with the model name
+  read from config, not hardcoded. Worker secret: `GROQ_API_KEY`.
+  Provider is chosen at runtime from a single `LLM_PROVIDER` setting so that
+  moving to OpenAI or Azure OpenAI later is a config change only — no
+  provider-specific SDK calls anywhere outside the LangChain abstraction.
+  Planned migration: OpenAI / Azure OpenAI once keys are available; do not
+  design anything that assumes Groq-specific behaviour.
   Note: this is the *product's* LLM only. The agent loop that builds this repo
   runs on Claude via `CLAUDE_CODE_OAUTH_TOKEN` (claude-code-action, billed to
   the Claude subscription) and is entirely unrelated to the product's provider.
