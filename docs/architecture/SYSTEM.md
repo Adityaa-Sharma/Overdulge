@@ -39,6 +39,8 @@ backend/
       db.py           PostgREST HTTP client wrapper (anon-key + user-JWT
                       forwarding mode, and service-role mode — see ADR-0002)
       crypto.py       symmetric encrypt/decrypt for tokens at rest
+      email.py        Resend REST client — send(to, subject, html) only,
+                      used by digest/cron.py (ADR-0004)
     oauth/
       engine.py       generic OAuth 2.1 + PKCE(S256) + DCR flow — see
                       ADR-0001
@@ -50,8 +52,29 @@ backend/
     sync/
       cron.py         Cron Trigger entrypoint, iterates linked_accounts
       normalize.py    canonical schema mapping (BRD §2.4-§2.8, §5)
+    budgets/
+      service.py      cap CRUD helpers + progress aggregation (overall from
+                      orders.grand_total_paise, per-category from
+                      order_items) — access-mode-agnostic, used by both the
+                      API route (user-JWT mode) and digest/cron.py
+                      (service-role mode); see ADR-0004
+    digest/
+      cron.py         weekly digest Cron Trigger entrypoint (service-role
+                      mode, see ADR-0004) — iterates users with a budget
+                      cap set, skips if already sent this ISO week
+                      (user_digest_state), sends via core/email.py
+      render.py       digest content (text/html) from a budgets/service.py
+                      progress result
     llm/
-      agent.py        LangChain agent(s) over the canonical schema
+      agent.py        LangChain agent(s) over the canonical schema (FR-4,
+                      tool-calling loop — see ADR-0003)
+      tools.py        fixed read-only query tool set backing agent.py
+                      (FR-4, ADR-0003)
+      budget_suggestions.py
+                      non-agentic init_chat_model() call generating
+                      "where to cut" prose grounded in pre-computed order
+                      lines from budgets/service.py (FR-5, ADR-0004) —
+                      deliberately not routed through agent.py/tools.py
   tests/
     unit/
     integration/
@@ -101,7 +124,8 @@ talks to the canonical schema or the generic OAuth engine.
 5. **Reads** (dashboard, NL query, budgets, calories, recommendations):
    backend reads the canonical schema scoped to the authenticated user. See
    ADR-0002 for how RLS is enforced on these reads vs. the service-role
-   writes used by linking/sync.
+   writes used by linking/sync/digest (ADR-0004 extends the service-role
+   confinement list to `digest/`).
 6. **NL query** (FR-4): `POST /api/v1/query` (user-JWT mode only, never
    service-role) → `llm/agent.py` runs a capped LangChain tool-calling loop
    over the fixed read-only tool set in `llm/tools.py` → the returned
@@ -109,6 +133,17 @@ talks to the canonical schema or the generic OAuth engine.
    re-typed by the model) with a model-generated explanation alongside it.
    See ADR-0003 for why this is tool-calling over a fixed set rather than
    text-to-SQL, and how "not enough data" is distinguished from a true `₹0`.
+7. **Budgets & weekly digest** (FR-5): `budgets/service.py` computes cap
+   progress (overall from `orders.grand_total_paise`, per-category from
+   `order_items`) from the canonical schema — called by the budgets API
+   route in user-JWT mode and by `digest/cron.py` in service-role mode.
+   Cut-suggestions (`api/budgets.py`) retrieve the top order lines driving
+   an over/near-cap category, then call `llm/budget_suggestions.py` to
+   generate prose grounded in those pre-computed rows (never model-recalled
+   numbers, per NFR-4). The weekly digest Cron Trigger runs
+   `digest/cron.py`, which guards against double-send per user per ISO
+   week via `user_digest_state` and sends through `core/email.py`
+   (Resend). Full design in ADR-0004.
 
 ## 4. Conventions
 
@@ -161,3 +196,7 @@ See `docs/architecture/decisions/`:
 - [ADR-0003](decisions/0003-nl-query-engine-tool-calling.md) — NL query
   engine: fixed tool-calling set over PostgREST (not text-to-SQL), numeric
   grounding enforcement, "not enough data" vs. true-zero disambiguation.
+- [ADR-0004](decisions/0004-budget-progress-cut-suggestions-and-digest.md) —
+  budget progress aggregation (overall vs. per-category), grounded
+  cut-suggestion design, Resend-based weekly digest and cron dispatch,
+  extends ADR-0002's service-role confinement to `digest/`.
