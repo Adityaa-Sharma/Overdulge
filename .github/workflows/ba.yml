@@ -1,0 +1,34 @@
+name: BA Agent
+on:
+  schedule:
+    - cron: "30 3 * * *"   # 09:00 IST daily
+  workflow_dispatch: {}
+concurrency:
+  group: ba-agent
+  cancel-in-progress: false
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+jobs:
+  ba:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app.outputs.token }}
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ steps.app.outputs.token }}
+          prompt: |
+            Read agents/ba.md and execute your daily run exactly as specified.
+            Use `gh` for all GitHub operations (GH_TOKEN is set).
+          claude_args: "--max-turns 60 --allowedTools Bash,Read,Glob,Grep,WebSearch,WebFetch"
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}

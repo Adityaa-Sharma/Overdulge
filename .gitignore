@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+venv/
+.venv/
+node_modules/
+dist/
+.env
+.dev.vars
+
+# Probe artifacts contain personal data (addresses, order history, order IDs)
+probe-report.md
+
+# Local MCP server config — agents in CI have no OAuth session for these
+.mcp.json

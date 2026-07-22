@@ -1,0 +1,46 @@
+name: Developer Agent
+on:
+  issues:
+    types: [labeled]
+  pull_request_review:
+    types: [submitted]
+concurrency:
+  group: dev-agent
+  cancel-in-progress: false
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+jobs:
+  develop:
+    if: >
+      (github.event_name == 'issues' &&
+        (github.event.label.name == 'ready-for-dev' ||
+         github.event.label.name == 'ready-for-fix')) ||
+      (github.event_name == 'pull_request_review' &&
+        github.event.review.state == 'changes_requested')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app.outputs.token }}
+          fetch-depth: 0
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ steps.app.outputs.token }}
+          prompt: |
+            Read agents/dev.md and execute one work item. Trigger context:
+            event=${{ github.event_name }},
+            issue=${{ github.event.issue.number || 'n/a' }},
+            pr=${{ github.event.pull_request.number || 'n/a' }}.
+            Follow the claim protocol strictly; if the item is already claimed
+            or labeled escalation:human/blocked, exit without changes.
+          claude_args: "--max-turns 100 --allowedTools Bash,Read,Write,Edit,Glob,Grep"
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}

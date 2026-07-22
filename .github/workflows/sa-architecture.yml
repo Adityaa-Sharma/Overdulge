@@ -1,0 +1,35 @@
+name: SA Agent - Architecture
+on:
+  issues:
+    types: [labeled]
+concurrency:
+  group: sa-arch-${{ github.event.issue.number }}
+  cancel-in-progress: false
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+jobs:
+  architect:
+    if: github.event.label.name == 'needs-architecture'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app.outputs.token }}
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ steps.app.outputs.token }}
+          prompt: |
+            Read agents/sa.md. Execute Mode A (Architecture) for issue
+            #${{ github.event.issue.number }}. If the issue is labeled
+            escalation:human, exit immediately without changes.
+          claude_args: "--max-turns 50 --allowedTools Bash,Read,Write,Edit,Glob,Grep"
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}

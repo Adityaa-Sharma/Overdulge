@@ -1,0 +1,19 @@
+name: Feature (BA)
+description: A product feature derived from the BRD
+labels: ["type:feature", "needs-architecture"]
+body:
+  - type: textarea
+    id: story
+    attributes: {label: User story, placeholder: "As a user, I want ... so that ..."}
+    validations: {required: true}
+  - type: textarea
+    id: reqs
+    attributes: {label: Functional requirements, description: "BRD § references included"}
+    validations: {required: true}
+  - type: textarea
+    id: ac
+    attributes: {label: Acceptance criteria, description: "Numbered, testable, QA-verifiable without asking the BA"}
+    validations: {required: true}
+  - type: textarea
+    id: facts
+    attributes: {label: Platform facts that apply (BRD §2), placeholder: "e.g. §2.5 money units, §2.7 orderType=DASH"}

@@ -1,0 +1,52 @@
+name: CI
+on:
+  pull_request: {}
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Lint + test backend (if present)
+        run: |
+          if [ -d backend ]; then
+            pip install uv
+            cd backend
+            uv sync --frozen || uv sync || pip install -r requirements.txt || true
+            uv run ruff check . || ruff check . || true
+            uv run pytest -q || pytest -q
+          else
+            echo "backend/ not present yet - skipping"
+          fi
+      - name: NFR-1 read-only guard (mutating tool denylist)
+        run: |
+          set -e
+          PATTERN='place_food_order|confirm_order|update_food_cart|flush_food_cart|apply_food_coupon|checkout|update_cart|clear_cart|create_order|create_online_payment_order|create_upi_reserve_pay_order|create_wallet_order|add_saved_address|update_drop_zone|update_user_name'
+          if [ -d backend ] && grep -rnE "$PATTERN" backend --include='*.py' | grep -v tests/contracts; then
+            echo "::error::Mutating platform tool reference found (NFR-1 violation)"; exit 1
+          fi
+          echo "NFR-1 guard passed"
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Lint + test + build frontend (if present)
+        run: |
+          if [ -d frontend ]; then
+            cd frontend
+            npm ci
+            npm run lint --if-present
+            npm test --if-present -- --watch=false
+            npm run build
+          else
+            echo "frontend/ not present yet - skipping"
+          fi

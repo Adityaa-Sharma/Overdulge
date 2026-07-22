@@ -1,0 +1,23 @@
+name: Task (SA)
+description: A PR-sized implementation unit broken down from a feature
+labels: ["type:task"]
+body:
+  - type: input
+    id: parent
+    attributes: {label: Parent feature, placeholder: "#12"}
+    validations: {required: true}
+  - type: textarea
+    id: scope
+    attributes: {label: Scope, description: "What this task includes and explicitly excludes"}
+    validations: {required: true}
+  - type: textarea
+    id: contracts
+    attributes: {label: Interfaces & files, description: "Modules/files expected, function signatures, API contracts"}
+    validations: {required: true}
+  - type: textarea
+    id: ac
+    attributes: {label: Acceptance criteria (mapped from parent)}
+    validations: {required: true}
+  - type: input
+    id: blocked
+    attributes: {label: Blocked by, placeholder: "blocked-by:#8 (leave empty if none)"}

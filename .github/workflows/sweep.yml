@@ -1,0 +1,42 @@
+name: Nightly Sweep (dead-letter recovery)
+on:
+  schedule:
+    - cron: "30 21 * * *"   # 03:00 IST nightly
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app.outputs.token }}
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ steps.app.outputs.token }}
+          prompt: |
+            You are the sweep. Using gh only (no code changes):
+            1) Issues labeled in-progress with no linked open PR and no
+               activity for 24h: remove in-progress and the assignee so the
+               original ready-for-* label re-fires the Developer workflow
+               (remove and re-add that label).
+            2) Issues labeled ready-for-dev or ready-for-fix, unassigned, with
+               no activity for 24h: remove and re-add the label to re-fire.
+            3) Non-draft PRs with CI green and no SA review for 24h: comment
+               and re-fire by removing/re-adding a `needs-review` label.
+            4) needs-architecture issues untouched for 24h: re-fire likewise.
+            5) List everything labeled escalation:human in a single summary
+               issue titled "Sweep report <date>" (create or update today's).
+            Never touch escalation:human items themselves. Never modify code.
+          claude_args: "--max-turns 40 --allowedTools Bash,Read"
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}

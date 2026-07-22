@@ -1,0 +1,25 @@
+name: Bug (QA)
+description: A defect found against acceptance criteria or in regression
+labels: ["type:bug", "ready-for-fix"]
+body:
+  - type: input
+    id: feature
+    attributes: {label: Affected feature issue, placeholder: "#12"}
+    validations: {required: true}
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options: ["P0 - blocks sign-off", "P1 - major", "P2 - minor"]
+    validations: {required: true}
+  - type: textarea
+    id: repro
+    attributes: {label: Reproduction steps, description: "Independently reproducible from this text alone"}
+    validations: {required: true}
+  - type: textarea
+    id: expected
+    attributes: {label: Expected vs actual}
+    validations: {required: true}
+  - type: textarea
+    id: evidence
+    attributes: {label: Evidence, description: "Logs, outputs, screenshots"}

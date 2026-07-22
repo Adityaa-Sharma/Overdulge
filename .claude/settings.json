@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__swiggy-food__get_addresses",
+      "mcp__swiggy-food__get_food_orders",
+      "mcp__swiggy-instamart__get_orders",
+      "mcp__zepto__list_order_history",
+      "mcp__zepto__get_past_order_items"
+    ]
+  }
+}
