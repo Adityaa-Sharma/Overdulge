@@ -5,7 +5,13 @@ on:
   pull_request_review:
     types: [submitted]
 concurrency:
-  group: dev-agent
+  # Scope per triggering issue/PR, NOT one global group. A single global group
+  # only keeps one running + one pending run; every extra label event is
+  # cancelled and lost, so items labelled together silently never get built.
+  # Per-item grouping lets distinct issues run in parallel. Working the same
+  # item twice is still prevented by the claim protocol (in-progress + assignee)
+  # in dev.md, which is the real lock.
+  group: dev-agent-${{ github.event.issue.number || github.event.pull_request.number }}
   cancel-in-progress: false
 permissions:
   contents: write
