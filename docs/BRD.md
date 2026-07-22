@@ -55,7 +55,8 @@ These are engineering law. Every sync-related task inherits them as acceptance c
   calls outside the LangChain abstraction — swapping providers must remain a
   configuration change, not a code change.
   Note: this is the *product's* LLM only. The agent loop that builds this repo
-  runs on `ANTHROPIC_API_KEY` (claude-code-action) and is unrelated.
+  runs on Claude via `CLAUDE_CODE_OAUTH_TOKEN` (claude-code-action, billed to
+  the Claude subscription) and is entirely unrelated to the product's provider.
 - Database: Supabase (Postgres). Backend talks to Supabase over its REST API
   (PostgREST) — do not assume `supabase-py` works under Pyodide.
 - Sync: Cloudflare Cron Triggers on the Worker, daily minimum.

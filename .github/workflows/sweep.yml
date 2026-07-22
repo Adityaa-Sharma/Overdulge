@@ -21,7 +21,7 @@ jobs:
           token: ${{ steps.app.outputs.token }}
       - uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ steps.app.outputs.token }}
           prompt: |
             You are the sweep. Using gh only (no code changes):
