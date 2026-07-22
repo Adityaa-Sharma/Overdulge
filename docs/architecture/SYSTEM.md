@@ -48,6 +48,12 @@ backend/
     sync/
       cron.py         Cron Trigger entrypoint, iterates linked_accounts
       normalize.py    canonical schema mapping (BRD §2.4-§2.8, §5)
+    analytics/
+      aggregate.py    pure functions: spend totals/trends, category and
+                      top-N breakdowns, run-rate projection, location lens
+                      (rows in, aggregate dicts out — no I/O). Shared by
+                      api/dashboard.py today, llm/agent.py (FR-4) and
+                      api/budgets.py (FR-5) later — see ADR-0003
     llm/
       agent.py        LangChain agent(s) over the canonical schema
   tests/
@@ -99,7 +105,11 @@ talks to the canonical schema or the generic OAuth engine.
 5. **Reads** (dashboard, NL query, budgets, calories, recommendations):
    backend reads the canonical schema scoped to the authenticated user. See
    ADR-0002 for how RLS is enforced on these reads vs. the service-role
-   writes used by linking/sync.
+   writes used by linking/sync. Aggregation (totals, trends, breakdowns,
+   projections) happens in Python over the fetched rows via
+   `analytics/aggregate.py`, not in SQL views/RPC — see ADR-0003. Dashboard
+   totals and projections are computed only from orders where
+   `is_cancelled = false` (BRD FR-2.3).
 
 ## 4. Conventions
 
@@ -145,3 +155,6 @@ See `docs/architecture/decisions/`:
   2.1 + PKCE(S256) + DCR flow design, token encryption at rest.
 - [ADR-0002](decisions/0002-supabase-access-pattern.md) — backend Supabase
   access pattern (service-role vs. user-JWT forwarding) and RLS convention.
+- [ADR-0003](decisions/0003-dashboard-aggregation-in-python.md) — dashboard/
+  analytics aggregation computed in Python over fetched rows, not DB views
+  or RPC.
