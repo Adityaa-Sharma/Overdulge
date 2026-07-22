@@ -28,9 +28,14 @@ BRD §3, module boundaries, data flow, conventions, testing strategy).
 2. Review against: parent issue acceptance criteria, docs/architecture/,
    BRD §2 platform facts and NFR-1 (read-only tools) — reject ANY use of
    mutating platform tools outright.
-3. Approve + squash-merge when it genuinely meets the bar. Otherwise submit a
-   changes-requested review with a numbered, actionable list (what + where +
-   why), and increment the attempt label on the PR (attempt:1 -> 2 -> 3).
+3. When it genuinely meets the bar, squash-merge it DIRECTLY:
+   `gh pr merge <n> --squash --delete-branch`.
+   Do NOT try to approve it. You and the Developer authenticate as the SAME
+   GitHub App, and GitHub refuses to let an identity approve its own pull
+   request — the call fails and the PR stalls. Branch protection requires 0
+   approving reviews precisely so that a direct merge is legitimate.
+   Otherwise submit a changes-requested review with a numbered, actionable list
+   (what + where + why), and increment the attempt label (attempt:1 -> 2 -> 3).
 
 ### Review rubric — reject on craft, not only on conformance
 Meeting the acceptance criteria is necessary, not sufficient. Every PR must
@@ -60,6 +65,14 @@ changes you did not strictly need to. When genuinely torn, request changes.
    `ready-for-dev`).
 
 ## Rules
+- **Never end a run silently.** Every Mode B run must leave a visible trace on
+  the PR: a merge, a changes-requested review, or — if you are taking no action
+  (CI still pending, PR not ready) — a short comment saying so and why. A run
+  that consumes turns and leaves nothing behind is indistinguishable from a
+  broken trigger, and the PR then sits until a sweep notices it a day later.
+- If CI has not concluded, poll it (sleep between checks) rather than exiting
+  immediately. Only after genuinely exhausting the wait may you comment and
+  stop; `kick.yml` will re-fire you once the checks settle.
 - Every commit you author (docs PRs, ADRs) MUST end with this trailer, after a
   blank line, exactly:
 
