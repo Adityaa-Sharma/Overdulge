@@ -71,6 +71,52 @@ jobs:
             fi
           done
 
+      - name: Merge PRs the SA reviewed and did not block
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          # SA (an LLM) proved unreliable at the FINAL act of merging: it reviews,
+          # concludes the PR meets the bar, then sometimes just... stops (#24, #26,
+          # #27 all stalled green and unreviewed). Prompt fixes reduced but did not
+          # eliminate this. So merging is now deterministic bookkeeping:
+          #   SA blocks by submitting a changes-requested review.
+          #   If SA ran, CI is green, and there is no blocking review, we merge.
+          # The quality gate is unchanged — SA can still reject any PR — but
+          # silence no longer stalls the loop.
+          for n in $(gh pr list --repo "$REPO" --state open --limit 50 \
+                       --json number,isDraft --jq '.[] | select(.isDraft | not) | .number'); do
+            pr=$(gh api "repos/$REPO/pulls/$n")
+            ms=$(echo "$pr" | jq -r .mergeable_state)
+            if [ "$ms" != "clean" ]; then
+              echo "PR #$n: mergeable_state=$ms — skip"; continue
+            fi
+            # any blocking review?
+            blocked=$(gh api "repos/$REPO/pulls/$n/reviews" \
+                        --jq '[.[] | select(.state == "CHANGES_REQUESTED")] | length')
+            if [ "$blocked" != "0" ]; then
+              echo "PR #$n: has changes-requested review — SA blocked it, skip"; continue
+            fi
+            # escalated?
+            esc=$(gh api "repos/$REPO/issues/$n" \
+                    --jq '[.labels[].name | select(. == "escalation:human")] | length')
+            if [ "$esc" != "0" ]; then
+              echo "PR #$n: escalation:human — skip"; continue
+            fi
+            # did the SA gate actually run successfully on the current head?
+            sha=$(echo "$pr" | jq -r .head.sha)
+            sa_ok=$(gh api "repos/$REPO/commits/$sha/check-runs" \
+                      --jq '[.check_runs[] | select(.name == "review" and .conclusion == "success")] | length')
+            if [ "$sa_ok" = "0" ]; then
+              echo "PR #$n: SA gate has not succeeded on head $sha — skip"; continue
+            fi
+            echo "PR #$n: CI green, SA ran, no objection -> merging"
+            gh pr merge "$n" --repo "$REPO" --squash --delete-branch \
+              && echo "  -> merged #$n" \
+              || echo "  -> merge failed for #$n (branch protection or race)"
+          done
+
       - name: Re-fire one queued item if the Developer is idle
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
