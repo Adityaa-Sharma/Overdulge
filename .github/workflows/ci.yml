@@ -19,7 +19,10 @@ jobs:
             pip install uv
             cd backend
             uv sync --frozen || uv sync || pip install -r requirements.txt || true
-            uv run ruff check . || ruff check . || true
+            # Standards are ENFORCED, not advisory. Do not append `|| true` to
+            # the lines below — that silently passes the build on violations.
+            uv run ruff check . || ruff check .
+            uv run ruff format --check . || ruff format --check .
             uv run pytest -q || pytest -q
           else
             echo "backend/ not present yet - skipping"
@@ -27,8 +30,15 @@ jobs:
       - name: NFR-1 read-only guard (mutating tool denylist)
         run: |
           set -e
-          PATTERN='place_food_order|confirm_order|update_food_cart|flush_food_cart|apply_food_coupon|checkout|update_cart|clear_cart|create_order|create_online_payment_order|create_upi_reserve_pay_order|create_wallet_order|add_saved_address|update_drop_zone|update_user_name'
-          if [ -d backend ] && grep -rnE "$PATTERN" backend --include='*.py' | grep -v tests/contracts; then
+          # Word boundaries matter: without \b, "checkout" matches unrelated
+          # identifiers like svn_checkout inside vendored packages.
+          PATTERN='\b(place_food_order|confirm_order|update_food_cart|flush_food_cart|apply_food_coupon|checkout|update_cart|clear_cart|create_order|create_online_payment_order|create_upi_reserve_pay_order|create_wallet_order|add_saved_address|update_drop_zone|update_user_name)\b'
+          # Only scan first-party code. Third-party packages are not ours to police,
+          # and scanning them produces false positives that block every PR.
+          if [ -d backend ] && grep -rnE "$PATTERN" backend --include='*.py' \
+               --exclude-dir=.venv --exclude-dir=venv --exclude-dir=site-packages \
+               --exclude-dir=node_modules --exclude-dir=__pycache__ \
+             | grep -v tests/contracts; then
             echo "::error::Mutating platform tool reference found (NFR-1 violation)"; exit 1
           fi
           echo "NFR-1 guard passed"

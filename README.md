@@ -25,12 +25,13 @@ Humans own: this kit's files, secrets, escalations, and platform OTP logins.
       subscription). Agent runs bill against the subscription, not API
       credits. Subscription rate limits apply to the whole loop.
 - [ ] `CLOUDFLARE_API_TOKEN` (Workers deploy scope) + `CLOUDFLARE_ACCOUNT_ID`.
-- [ ] Azure OpenAI — the product's LLM (used by the Worker, set later as Worker
-      secrets too during scaffolding; kept here for CI/QA needs):
-      `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `OPENAI_API_VERSION`,
-      `AZURE_OPENAI_DEPLOYMENT`.
+- [ ] `GROQ_API_KEY` — the product's LLM (used by the Worker, set later as a
+      Worker secret too during scaffolding; kept here for CI/QA needs).
+      Provider is selected via `LLM_PROVIDER`; migrating to OpenAI or Azure
+      OpenAI later must remain a config change, never a code change.
       Note: this powers the *product*, not the agents. The agent loop runs on
-      `ANTHROPIC_API_KEY` — Azure OpenAI cannot drive claude-code-action.
+      `CLAUDE_CODE_OAUTH_TOKEN` — a Groq or OpenAI key cannot drive
+      claude-code-action, which runs Claude models only.
 - [ ] Supabase: create free project; note URL + anon key + service-role key.
       These become Worker secrets during scaffolding (task will specify).
 

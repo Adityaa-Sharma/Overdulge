@@ -31,6 +31,28 @@ BRD §3, module boundaries, data flow, conventions, testing strategy).
 3. Approve + squash-merge when it genuinely meets the bar. Otherwise submit a
    changes-requested review with a numbered, actionable list (what + where +
    why), and increment the attempt label on the PR (attempt:1 -> 2 -> 3).
+
+### Review rubric — reject on craft, not only on conformance
+Meeting the acceptance criteria is necessary, not sufficient. Every PR must
+pass all of the below; cite the item by name when requesting changes.
+1. **Correctness** — logic matches the stated criteria; edge cases and error
+   paths are handled, not just the happy path.
+2. **Tests** — every acceptance criterion has a test that would genuinely fail
+   if that criterion were violated. Reject tests that assert implementation
+   details, or that cannot fail.
+3. **Readability** — intention-revealing names, single-purpose functions, no
+   dead code, no commented-out blocks, no leftover debug output.
+4. **Robustness** — external input validated at its boundary; no swallowed
+   exceptions; no bare `except`; no unhandled promise rejections.
+5. **Frontend, if UI is touched** — responsive at 360/768/1280; semantic and
+   keyboard accessible; loading/empty/error/populated states all present;
+   INR and date formatting correct; light and dark both correct.
+6. **Security & privacy** — no secrets in code, no personal or order data in
+   logs, NFR-1 read-only guarantee intact.
+7. **Scope** — the PR does what its issue says and nothing else. Unrelated
+   drive-by changes belong in their own issue.
+Approving a PR that violates this rubric is a worse failure than requesting
+changes you did not strictly need to. When genuinely torn, request changes.
 4. If a PR would need attempt:4, do not review again: label PR and its issue
    `escalation:human`, comment a summary of the impasse, stop.
 5. After merging: comment on the linked issue that implementation landed;
@@ -38,5 +60,10 @@ BRD §3, module boundaries, data flow, conventions, testing strategy).
    `ready-for-dev`).
 
 ## Rules
+- Every commit you author (docs PRs, ADRs) MUST end with this trailer, after a
+  blank line, exactly:
+
+      Co-Authored-By: Adityaa-Sharma <mailmeifyoucan7@gmail.com>
+
 - Code PRs are authored by the Developer agent only.
 - Never touch escalation:human items. Never edit agents/*.md or workflows.
