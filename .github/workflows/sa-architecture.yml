@@ -26,6 +26,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ steps.app.outputs.token }}
+          allowed_bots: "overdulge"
           prompt: |
             Read agents/sa.md. Execute Mode A (Architecture) for issue
             #${{ github.event.issue.number }}. If the issue is labeled

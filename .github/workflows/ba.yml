@@ -26,6 +26,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ steps.app.outputs.token }}
+          allowed_bots: "overdulge"
           prompt: |
             Read agents/ba.md and execute your daily run exactly as specified.
             Use `gh` for all GitHub operations (GH_TOKEN is set).
