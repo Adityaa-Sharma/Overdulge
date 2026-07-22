@@ -1,7 +1,12 @@
 name: SA Agent - PR Gate
 on:
   pull_request:
-    types: [opened, ready_for_review, synchronize]
+    # `labeled` and `reopened` matter for recovery, not just the happy path:
+    #  - SA can run before CI concludes and exit without reviewing. Nothing
+    #    else re-triggers it, so the PR would sit unreviewed forever.
+    #  - sweep.yml and kick.yml both recover stalled PRs by toggling a
+    #    `needs-review` label, which does nothing unless `labeled` is listed.
+    types: [opened, ready_for_review, synchronize, reopened, labeled]
 concurrency:
   group: sa-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -11,7 +16,13 @@ permissions:
   pull-requests: write
 jobs:
   review:
-    if: github.event.pull_request.draft == false
+    # Only `needs-review` may re-trigger via a label. Without this guard SA's own
+    # attempt:1 -> 2 -> 3 labels would re-fire SA on every increment — a runaway
+    # self-triggering loop burning subscription usage.
+    if: >
+      github.event.pull_request.draft == false &&
+      (github.event.action != 'labeled' ||
+       github.event.label.name == 'needs-review')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/create-github-app-token@v1
