@@ -1,6 +1,6 @@
 import json
 
-import httpx2 as httpx
+import httpx
 import pytest
 
 from app.core import db, linked_accounts

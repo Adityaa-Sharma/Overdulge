@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import httpx2 as httpx
+import httpx
 
 from app.core.config import get_settings
 
