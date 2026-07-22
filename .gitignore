@@ -12,3 +12,8 @@ probe-report.md
 
 # Local MCP server config — agents in CI have no OAuth session for these
 .mcp.json
+
+# GitHub App private keys — NEVER commit. Belongs in Actions secrets only.
+*.pem
+*.key
+*private-key*
