@@ -19,7 +19,10 @@ jobs:
             pip install uv
             cd backend
             uv sync --frozen || uv sync || pip install -r requirements.txt || true
-            uv run ruff check . || ruff check . || true
+            # Standards are ENFORCED, not advisory. Do not append `|| true` to
+            # the lines below — that silently passes the build on violations.
+            uv run ruff check . || ruff check .
+            uv run ruff format --check . || ruff format --check .
             uv run pytest -q || pytest -q
           else
             echo "backend/ not present yet - skipping"

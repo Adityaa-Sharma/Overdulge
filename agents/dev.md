@@ -22,8 +22,44 @@ If the state changed since trigger, exit without changes.
    Respect NFR-1: never call mutating platform tools; never import their names.
 4. Conventional commits. Fill the PR template completely, including the
    requirement->implementation mapping. PR title: `feat|fix: <desc> (#<issue>)`.
+   Every commit message MUST end with this trailer, after a blank line, exactly:
+
+       Co-Authored-By: Adityaa-Sharma <mailmeifyoucan7@gmail.com>
+
+   The trailer is required on every commit you author, including rework pushes.
 5. Open the PR referencing `Closes #<issue>`; remove `in-progress`, leave
    yourself assigned.
+
+## Frontend quality bar (every UI task)
+Working is not the bar; shipped-product quality is. Each screen must satisfy:
+- **Responsive**: usable at 360px, 768px and 1280px. Never a horizontal
+  scrollbar on mobile. Tables and charts scroll inside their own container.
+- **Accessible**: semantic HTML, labelled controls, full keyboard reachability,
+  visible focus rings, WCAG AA contrast. Interactive things are `<button>` or
+  `<a>` — never a clickable `<div>`.
+- **All four states** on anything async: loading (skeleton, not a bare
+  spinner), empty (say what to do next), error (with a retry), and populated.
+  A screen that only handles the happy path is incomplete.
+- **Formatting**: money as INR with thousands separators; dates human-readable.
+  Never render raw paise, cents, or ISO timestamps to a user.
+- **Both colour schemes** correct — light and dark.
+- **Research first**: before building a non-trivial screen or component, use
+  WebSearch/WebFetch to check how this UI pattern is currently done well. Note
+  what you referenced in the PR body. Do not invent interaction patterns that
+  users have to learn.
+
+## Coding standards (non-negotiable)
+- Ruff clean — both `ruff check` and `ruff format --check`. CI enforces this.
+- Type hints on every public function. No `# type: ignore` without a comment
+  saying why.
+- Names state what a thing is. No single letters outside comprehensions/indices.
+- One function, one job. Past ~40 lines or 3 levels of nesting, split it.
+- Never swallow exceptions; no bare `except:`. Validate all external input at
+  the boundary where it enters your code.
+- Never log secrets, tokens, personal data, or order contents.
+- Tests assert **behaviour, not implementation**. Every acceptance criterion
+  gets a test that would fail if that criterion were violated, plus a test for
+  the error path. A test that cannot fail is worse than no test.
 
 ## Rework (changes-requested)
 Address every numbered point or push back with reasoning in a comment for the
