@@ -125,11 +125,16 @@ talks to the canonical schema or the generic OAuth engine.
 - **Commits**: Conventional Commits (`feat:`, `fix:`, `docs:`, `test:`,
   `chore:`).
 - **NFR-1**: no mutating platform tool name may appear in `backend/`
-  outside `tests/contracts/` (enforced by the CI denylist grep in
-  `.github/workflows/ci.yml`) — read-only tools only, every platform,
-  always.
+  outside `tests/contracts/` (enforced by `backend/scripts/check_readonly_guard.py`,
+  called from the CI step in `.github/workflows/ci.yml`; denylist source of
+  truth is `backend/app/mcp/DENYLIST.md` — see ADR-0004) — read-only tools
+  only, every platform, always.
 - **NFR-2**: no order data or token material in logs; no real personal data
-  in committed fixtures.
+  in committed fixtures. All logging goes through `core/logging.py` (ADR-0004)
+  — no direct `logging`/`print` calls elsewhere. Every user-scoped table
+  gets both an RLS policy (ADR-0002) and a case in
+  `backend/tests/integration/test_rls_isolation.py` (ADR-0004) in the same
+  PR that creates it.
 - **NFR-4**: any LLM-generated answer that states a number must source that
   number from a DB-backed tool/query result, never from the model's own
   text — see ADR-0003's grounding mechanism for the pattern (code renders
@@ -141,7 +146,9 @@ talks to the canonical schema or the generic OAuth engine.
   module; integration tests run against recorded fixtures in
   `tests/contracts/` and `tests/integration/fixtures/` — never against live
   platform accounts. The NFR-1 static guard in CI is a backstop, not a
-  substitute for not writing mutating calls.
+  substitute for not writing mutating calls. `tests/integration/test_rls_isolation.py`
+  is the cross-user RLS regression suite (ADR-0004) — every user-scoped
+  table's policies are proven here, not just declared in a migration.
 - **Frontend**: `vitest` + React Testing Library for components/routes;
   `npm run build` succeeding is itself a deploy gate (`deploy.yml`).
 - **Contracts**: `tests/contracts/` stores the MCP tool schemas each
@@ -161,3 +168,6 @@ See `docs/architecture/decisions/`:
 - [ADR-0003](decisions/0003-nl-query-engine-tool-calling.md) — NL query
   engine: fixed tool-calling set over PostgREST (not text-to-SQL), numeric
   grounding enforcement, "not enough data" vs. true-zero disambiguation.
+- [ADR-0004](decisions/0004-nfr1-nfr2-enforcement-hardening.md) — NFR-1
+  denylist hardening (versioned + tested), the RLS cross-user isolation
+  test harness, and the logging redaction convention.
