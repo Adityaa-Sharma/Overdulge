@@ -109,6 +109,15 @@ talks to the canonical schema or the generic OAuth engine.
    re-typed by the model) with a model-generated explanation alongside it.
    See ADR-0003 for why this is tool-calling over a fixed set rather than
    text-to-SQL, and how "not enough data" is distinguished from a true `₹0`.
+7. **Recommendations** (FR-7): `api/recommendations.py` builds "usuals" from
+   Zepto `get_past_order_items` + Instamart `your_go_to_items` (live calls,
+   pre-aggregated by the platform) plus a Food frequency ranking computed
+   over already-synced `order_items`. Suggested alternatives are fetched via
+   live `search_products`/`search_menu` at request time — never cached or
+   persisted — and compared against the frequent item on price and (where
+   both sides have one) calorie estimate. Reorder links are `redirect_url`
+   fields produced by the adapters themselves, never constructed in the
+   route. See ADR-0004.
 
 ## 4. Conventions
 
@@ -161,3 +170,7 @@ See `docs/architecture/decisions/`:
 - [ADR-0003](decisions/0003-nl-query-engine-tool-calling.md) — NL query
   engine: fixed tool-calling set over PostgREST (not text-to-SQL), numeric
   grounding enforcement, "not enough data" vs. true-zero disambiguation.
+- [ADR-0004](decisions/0004-usuals-and-live-recommendation-matching.md) —
+  "usuals" ranking source per platform, live (never cached) alternative
+  matching, shared calorie-estimation function reuse, adapter-owned
+  redirect URLs.
