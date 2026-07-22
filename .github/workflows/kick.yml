@@ -129,6 +129,35 @@ jobs:
               || echo "  -> merge failed for #$n (branch protection or race)"
           done
 
+      - name: Re-fire one stalled needs-architecture issue
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          # needs-architecture issues whose original SA-Architecture run failed
+          # (e.g. pre-allowed_bots) had NO re-fire path except the 24h sweep, so
+          # they sat idle. Re-fire ONE per kick when SA-Architecture is idle, so
+          # they drain steadily without a 7-way parallel SA/task-issue cascade.
+          active=$(gh run list --repo "$REPO" --workflow=sa-architecture.yml --limit 15 \
+                     --json status --jq '[.[] | select(.status=="in_progress" or .status=="queued")] | length')
+          if [ "$active" != "0" ]; then
+            echo "SA-Architecture has $active active run(s) — skip."; exit 0
+          fi
+          num=$(gh issue list --repo "$REPO" --label needs-architecture --state open --limit 50 \
+                  --json number,labels,createdAt \
+                  --jq '[ .[] | select([.labels[].name] | any(.=="escalation:human") | not) ]
+                        | sort_by(.createdAt) | .[0].number // empty')
+          if [ -n "${num:-}" ]; then
+            echo "Re-firing needs-architecture on #$num"
+            gh issue edit "$num" --repo "$REPO" --remove-label needs-architecture
+            sleep 5
+            gh issue edit "$num" --repo "$REPO" --add-label needs-architecture \
+              && echo "  -> SA-Architecture should now fire for #$num"
+          else
+            echo "No stalled needs-architecture issues."
+          fi
+
       - name: Re-fire one queued item if the Developer is idle
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
