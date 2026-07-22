@@ -49,7 +49,18 @@ backend/
       cron.py         Cron Trigger entrypoint, iterates linked_accounts
       normalize.py    canonical schema mapping (BRD §2.4-§2.8, §5)
     llm/
+      client.py       shared LangChain chat-model getter, provider read from
+                      `LLM_PROVIDER` (BRD §3) — every LLM-backed feature
+                      (query engine, budgeting, calories) goes through this,
+                      never calls a provider SDK directly
       agent.py        LangChain agent(s) over the canonical schema
+      calorie_estimator.py  Indian-nutrition-reference-grounded calorie
+                      mapping + eligibility rule — see ADR-0003
+      tone_guard.py   denylist screen for body/weight/dieting language in
+                      any LLM-generated user-facing copy — see ADR-0003
+      data/
+        indian_nutrition_reference.json  curated grounding dataset for
+                      calorie_estimator.py, versioned in-repo
   tests/
     unit/
     integration/
@@ -145,3 +156,7 @@ See `docs/architecture/decisions/`:
   2.1 + PKCE(S256) + DCR flow design, token encryption at rest.
 - [ADR-0002](decisions/0002-supabase-access-pattern.md) — backend Supabase
   access pattern (service-role vs. user-JWT forwarding) and RLS convention.
+- [ADR-0003](decisions/0003-calorie-estimation-architecture.md) — calorie
+  estimation: nutrition-reference-grounded prompting, estimate-once-at-ingest
+  caching, eligibility as a pure function, and code-level tone-safety
+  enforcement.
