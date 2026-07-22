@@ -9,9 +9,11 @@ it — one system doc, updated in place, ADRs for point decisions.
 - **Frontend**: React (Vite), static build, deployed to GitHub Pages.
 - **Backend**: Python on Cloudflare Workers (Python Workers, `pywrangler`),
   FastAPI for routing.
-- **LLM**: LangChain `init_chat_model`, provider-agnostic; provider is Azure
-  OpenAI (`init_chat_model("azure_openai:<deployment>")`). No provider SDK
-  calls outside the LangChain abstraction.
+- **LLM**: LangChain `init_chat_model`, provider-agnostic. Current provider is
+  Groq (`init_chat_model("groq:<model>")`, `GROQ_API_KEY`), chosen at runtime
+  via a single `LLM_PROVIDER` setting; Azure OpenAI is the planned future
+  migration (config change only). No provider SDK calls outside the
+  LangChain abstraction.
 - **Database**: Supabase (Postgres), accessed over its REST API (PostgREST).
   Do not assume `supabase-py` works under Pyodide — use plain HTTP calls
   (`httpx`/`requests`-style) against PostgREST + GoTrue endpoints.
@@ -100,6 +102,13 @@ talks to the canonical schema or the generic OAuth engine.
    backend reads the canonical schema scoped to the authenticated user. See
    ADR-0002 for how RLS is enforced on these reads vs. the service-role
    writes used by linking/sync.
+6. **NL query** (FR-4): `POST /api/v1/query` (user-JWT mode only, never
+   service-role) → `llm/agent.py` runs a capped LangChain tool-calling loop
+   over the fixed read-only tool set in `llm/tools.py` → the returned
+   number is the tool's raw structured output (formatted in code, never
+   re-typed by the model) with a model-generated explanation alongside it.
+   See ADR-0003 for why this is tool-calling over a fixed set rather than
+   text-to-SQL, and how "not enough data" is distinguished from a true `₹0`.
 
 ## 4. Conventions
 
@@ -121,6 +130,10 @@ talks to the canonical schema or the generic OAuth engine.
   always.
 - **NFR-2**: no order data or token material in logs; no real personal data
   in committed fixtures.
+- **NFR-4**: any LLM-generated answer that states a number must source that
+  number from a DB-backed tool/query result, never from the model's own
+  text — see ADR-0003's grounding mechanism for the pattern (code renders
+  the number, the model only explains it).
 
 ## 5. Testing strategy
 
@@ -145,3 +158,6 @@ See `docs/architecture/decisions/`:
   2.1 + PKCE(S256) + DCR flow design, token encryption at rest.
 - [ADR-0002](decisions/0002-supabase-access-pattern.md) — backend Supabase
   access pattern (service-role vs. user-JWT forwarding) and RLS convention.
+- [ADR-0003](decisions/0003-nl-query-engine-tool-calling.md) — NL query
+  engine: fixed tool-calling set over PostgREST (not text-to-SQL), numeric
+  grounding enforcement, "not enough data" vs. true-zero disambiguation.
