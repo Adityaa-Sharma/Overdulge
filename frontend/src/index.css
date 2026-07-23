@@ -47,6 +47,15 @@ h1 {
   margin: 0 0 8px;
 }
 
+h2 {
+  font-family: var(--sans);
+  font-weight: 500;
+  color: var(--text-h);
+  font-size: 22px;
+  letter-spacing: -0.3px;
+  margin: 8px 0 0;
+}
+
 p {
   margin: 0;
 }
@@ -140,7 +149,7 @@ input:focus-visible {
   border-radius: 8px;
 }
 
-.link-list h2 {
+.link-list h3 {
   font-family: var(--sans);
   font-size: 18px;
   font-weight: 500;
