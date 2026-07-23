@@ -1,46 +1,67 @@
 /* ==========================================================================
-   Overdulge design system
-   A cohesive, modern, dark-first visual language. Screens use semantic HTML
-   plus the utility classes below, so restyling here restyles the whole app.
-   Design language is documented for agents in agents/dev.md ("Design system").
+   Overdulge design system — "modern, intuitive, lightly quirky"
+
+   Research this is built on:
+   - Fintech dashboards: the key number must dominate the hierarchy; the spend
+     breakdown should be readable by colour + proportion, not raw numbers.
+   - Empty states are an onboarding surface: name the value and show the SHAPE
+     of success (ghost preview) — never a dead "no data yet".
+   - Minimalism + generous whitespace; WCAG 2.1 AA contrast; >=44px touch
+     targets; mobile-first.
+
+   The quirk is deliberate and small: a marigold highlighter swipe, tilted
+   sticker badges, receipt paper (dashed rules + tabular monospace numerals),
+   and each delivery platform keeping its own brand colour, so colour always
+   MEANS something rather than decorating.
    ========================================================================== */
 
 :root {
-  /* Brand — a warm violet→magenta, appetite + intelligence. */
-  --brand-1: #8b5cf6;
-  --brand-2: #d946a6;
-  --brand-grad: linear-gradient(135deg, var(--brand-1), var(--brand-2));
-  --brand-soft: rgba(139, 92, 246, 0.14);
+  /* Signature accent — marigold. Deliberately distinct from Swiggy orange,
+     Zomato red and Zepto purple so Overdulge reads as its own brand. */
+  --gold: #f5a524;
+  --gold-deep: #a86a00; /* AA-contrast gold for text on paper */
+  --gold-swipe: #fcd877;
+  --gold-soft: rgba(245, 165, 36, 0.14);
 
-  /* Semantic accents. */
-  --good: #22c55e;
-  --good-soft: rgba(34, 197, 94, 0.14);
-  --warn: #f59e0b;
-  --bad: #f43f5e;
-  --bad-soft: rgba(244, 63, 94, 0.13);
+  /* Warm neutrals. Aubergine ink instead of pure black — softer, less clinical. */
+  --paper: #fbf5ec;
+  --paper-2: #f3e8d8;
+  --card: #ffffff;
+  --ink: #241b26;
+  --ink-2: #6b6172; /* AA on --card and --paper */
+  --line: #ebe0d0;
+  --line-2: #ded1be;
 
-  /* Light theme surfaces (dark is default below via prefers-color-scheme). */
-  --bg: #f6f6f9;
-  --surface: #ffffff;
-  --surface-2: #fbfbfd;
-  --elevated: #ffffff;
-  --border: #e7e6ec;
-  --border-strong: #d6d4de;
-  --text: #4a4658;
-  --text-h: #17141f;
-  --text-dim: #837f92;
-  --shadow: 0 1px 2px rgba(20, 16, 30, 0.04), 0 8px 24px rgba(20, 16, 30, 0.06);
-  --shadow-lg: 0 12px 40px rgba(20, 16, 30, 0.12);
+  /* Semantic — reserved for under/over, never decoration. */
+  --good: #0f7a4f;
+  --good-soft: #dbf3e7;
+  --bad: #c62a30;
+  --bad-soft: #fbe2e2;
 
-  --sans: system-ui, 'Segoe UI', Roboto, -apple-system, sans-serif;
-  --radius: 14px;
-  --radius-sm: 10px;
-  --radius-lg: 20px;
+  /* Platform brand colours — colour that carries meaning. */
+  --swiggy: #e5730f;
+  --instamart: #cf2f7b;
+  --zepto: #5b2ce6;
+
+  --r-card: 20px;
+  --r-btn: 13px;
+  --r-chip: 999px;
+
+  --shadow: 0 1px 2px rgba(45, 30, 20, 0.05), 0 10px 26px rgba(45, 30, 20, 0.07);
+  --shadow-lg: 0 18px 48px rgba(45, 30, 20, 0.16);
+  --sticker-shadow: 0 6px 16px rgba(45, 30, 20, 0.14);
+  --receipt-line: rgba(36, 27, 38, 0.07);
+
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --mono: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
+
+  /* >=44px touch targets (WCAG 2.5.5 / mobile-first). */
+  --tap: 44px;
 
   font: 16px/1.5 var(--sans);
   color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
+  color: var(--ink);
+  background: var(--paper);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -49,17 +70,28 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0d0b12;
-    --surface: #16131d;
-    --surface-2: #1b1826;
-    --elevated: #201c2c;
-    --border: #2a2636;
-    --border-strong: #3a3548;
-    --text: #a9a3b8;
-    --text-h: #f4f2f8;
-    --text-dim: #6f6a80;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.35);
-    --shadow-lg: 0 16px 50px rgba(0, 0, 0, 0.5);
+    --gold: #f7b646;
+    --gold-deep: #f7b646;
+    --gold-swipe: #6a4d12;
+    --gold-soft: rgba(247, 182, 70, 0.16);
+    --paper: #17121c;
+    --paper-2: #1e1727;
+    --card: #221a2b;
+    --ink: #f4ece1;
+    --ink-2: #b0a6b6;
+    --line: #332a3d;
+    --line-2: #443a50;
+    --good: #3ad08f;
+    --good-soft: #133026;
+    --bad: #ff8a8e;
+    --bad-soft: #37201f;
+    --swiggy: #ff9440;
+    --instamart: #f368a5;
+    --zepto: #9a78ff;
+    --receipt-line: rgba(244, 236, 225, 0.08);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 30px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 20px 54px rgba(0, 0, 0, 0.55);
+    --sticker-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
   }
 }
 
@@ -71,8 +103,8 @@ body {
   margin: 0;
   min-height: 100svh;
   background:
-    radial-gradient(1100px 500px at 100% -10%, var(--brand-soft), transparent 60%),
-    var(--bg);
+    radial-gradient(900px 420px at 88% -8%, var(--gold-soft), transparent 60%),
+    var(--paper);
 }
 
 #root {
@@ -80,27 +112,65 @@ body {
 }
 
 /* --- Typography ---------------------------------------------------------- */
-h1, h2, h3 {
-  color: var(--text-h);
-  font-weight: 650;
-  letter-spacing: -0.02em;
+h1,
+h2,
+h3 {
+  color: var(--ink);
+  font-weight: 800;
+  letter-spacing: -0.022em;
   margin: 0;
-  line-height: 1.2;
+  line-height: 1.14;
+  text-wrap: balance;
 }
-h1 { font-size: clamp(1.6rem, 3vw, 2.1rem); }
-h2 { font-size: 1.25rem; }
-h3 { font-size: 1.02rem; font-weight: 600; }
-p { margin: 0; }
-a { color: var(--brand-1); text-decoration: none; }
-a:hover { text-decoration: underline; }
+h1 {
+  font-size: clamp(1.75rem, 4.5vw, 2.5rem);
+}
+h2 {
+  font-size: 1.2rem;
+}
+h3 {
+  font-size: 1rem;
+  font-weight: 700;
+}
+p {
+  margin: 0;
+}
+a {
+  color: var(--gold-deep);
+  text-decoration: none;
+  font-weight: 600;
+}
+a:hover {
+  text-decoration: underline;
+}
 
-.muted { color: var(--text-dim); }
+.muted {
+  color: var(--ink-2);
+}
 .eyebrow {
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.14em;
   font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--text-dim);
+  font-weight: 800;
+  color: var(--gold-deep);
+}
+/* Numbers are receipt-like: monospace + tabular so columns line up. */
+.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+/* The one bit of marker-pen quirk, on a single punch word. */
+.hl {
+  background: linear-gradient(
+    180deg,
+    transparent 58%,
+    var(--gold-swipe) 58%,
+    var(--gold-swipe) 92%,
+    transparent 92%
+  );
+  padding: 0 0.06em;
+  border-radius: 2px;
 }
 
 /* --- App shell ----------------------------------------------------------- */
@@ -112,224 +182,593 @@ a:hover { text-decoration: underline; }
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px clamp(16px, 5vw, 40px);
-  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  padding: 12px clamp(16px, 5vw, 40px);
+  background: color-mix(in srgb, var(--paper) 86%, transparent);
   backdrop-filter: saturate(1.4) blur(10px);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--line);
 }
 .brand {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  font-weight: 750;
-  font-size: 1.12rem;
-  color: var(--text-h);
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: var(--ink);
   letter-spacing: -0.02em;
 }
 .brand__mark {
-  width: 26px; height: 26px;
-  border-radius: 8px;
-  background: var(--brand-grad);
-  box-shadow: 0 4px 14px var(--brand-soft);
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
   flex: none;
+  transform: rotate(-6deg);
+  background: radial-gradient(circle at 30% 25%, #ffd98a, var(--gold) 62%);
+  box-shadow: 0 4px 12px var(--gold-soft);
+  color: #3a2600;
+  font-weight: 900;
+  font-size: 0.95rem;
 }
-.app-nav { display: flex; align-items: center; gap: 6px; }
-.app-nav a {
-  padding: 7px 12px;
-  border-radius: 999px;
-  color: var(--text);
-  font-weight: 550;
+.brand__mark span {
+  transform: rotate(6deg);
+}
+.app-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.app-nav a,
+.app-nav button {
+  min-height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  border-radius: var(--r-chip);
+  color: var(--ink-2);
+  font-weight: 650;
   font-size: 0.92rem;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
 }
-.app-nav a:hover { background: var(--surface-2); text-decoration: none; color: var(--text-h); }
-.app-nav a[aria-current='page'] { background: var(--brand-soft); color: var(--text-h); }
+.app-nav a:hover,
+.app-nav button:hover {
+  background: var(--paper-2);
+  color: var(--ink);
+  text-decoration: none;
+}
+.app-nav a[aria-current='page'] {
+  background: var(--gold-soft);
+  color: var(--gold-deep);
+}
+
+/* At ~390px the brand + three nav items overflow and "Log out" wraps onto two
+   lines. Compact the nav rather than dropping items — the 44px touch target is
+   kept, only the horizontal padding and label size shrink. */
+@media (max-width: 480px) {
+  .app-header {
+    padding-left: 14px;
+    padding-right: 14px;
+    gap: 10px;
+  }
+  .brand {
+    font-size: 1rem;
+    gap: 8px;
+  }
+  .app-nav {
+    gap: 2px;
+  }
+  .app-nav a,
+  .app-nav button {
+    padding: 8px 9px;
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+}
 
 .container {
   width: 100%;
-  max-width: 960px;
+  max-width: 1000px;
   margin: 0 auto;
-  padding: clamp(20px, 4vw, 40px) clamp(16px, 5vw, 40px) 64px;
+  padding: clamp(22px, 4vw, 40px) clamp(16px, 5vw, 40px) 72px;
 }
-.container--narrow { max-width: 440px; }
+.container--narrow {
+  max-width: 440px;
+}
+main {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.page-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 
-main { display: flex; flex-direction: column; gap: 20px; }
-
-/* --- Cards --------------------------------------------------------------- */
+/* --- Cards / layout ------------------------------------------------------ */
 .card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
   padding: 20px;
   box-shadow: var(--shadow);
 }
-.card--pad-lg { padding: 28px; }
-.stack { display: flex; flex-direction: column; gap: 16px; }
-.row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.card--pad-lg {
+  padding: clamp(22px, 4vw, 32px);
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.row--center {
+  justify-content: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
 .grid {
   display: grid;
   gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
 }
 
-/* Stat tile for dashboards. */
-.stat { display: flex; flex-direction: column; gap: 6px; }
-.stat__label { font-size: 0.82rem; color: var(--text-dim); font-weight: 600; }
-.stat__value { font-size: 1.9rem; font-weight: 700; color: var(--text-h); letter-spacing: -0.02em; }
-.stat__delta { font-size: 0.82rem; font-weight: 600; }
-.stat__delta.up { color: var(--bad); }
-.stat__delta.down { color: var(--good); }
+/* Stat tile — the key number dominates (fintech hierarchy research). */
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.stat__label {
+  font-size: 0.8rem;
+  color: var(--ink-2);
+  font-weight: 650;
+}
+.stat__value {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.9rem;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+.stat__delta {
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: var(--ink-2);
+}
 
 /* --- Buttons ------------------------------------------------------------- */
-button, .btn {
+button,
+.btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 11px 18px;
+  min-height: var(--tap);
+  padding: 12px 18px;
   font: inherit;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1;
-  color: var(--text-h);
-  background: var(--surface-2);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
+  color: var(--ink);
+  background: var(--card);
+  border: 1.5px solid var(--line-2);
+  border-radius: var(--r-btn);
   cursor: pointer;
-  transition: transform 0.06s ease, background 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition:
+    transform 0.06s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
 }
-button:hover, .btn:hover { border-color: var(--brand-1); }
-button:active, .btn:active { transform: translateY(1px); }
+button:hover,
+.btn:hover {
+  border-color: var(--gold);
+}
+button:active,
+.btn:active {
+  transform: translateY(1px);
+}
+/* Ink primary: highest contrast, and it keeps marigold free to be the accent. */
 .btn-primary {
-  color: #fff;
-  background: var(--brand-grad);
-  border: none;
-  box-shadow: 0 6px 20px var(--brand-soft);
+  color: var(--paper);
+  background: var(--ink);
+  border-color: transparent;
 }
-.btn-primary:hover { box-shadow: 0 8px 26px var(--brand-soft); filter: brightness(1.05); }
-.btn-ghost { background: transparent; border-color: transparent; color: var(--text); }
-.btn-ghost:hover { background: var(--surface-2); border-color: var(--border); }
-.btn-block { width: 100%; }
-button:disabled, .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+.btn-primary:hover {
+  filter: brightness(1.14);
+  border-color: transparent;
+}
+.btn-gold {
+  color: #3a2600;
+  background: var(--gold);
+  border-color: transparent;
+}
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-2);
+}
+.btn-ghost:hover {
+  background: var(--paper-2);
+  color: var(--ink);
+}
+.btn-block {
+  width: 100%;
+}
+button:disabled,
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
 
-button:focus-visible, .btn:focus-visible, input:focus-visible, a:focus-visible {
-  outline: 2px solid var(--brand-1);
+button:focus-visible,
+.btn:focus-visible,
+input:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--gold);
   outline-offset: 2px;
+  border-radius: var(--r-btn);
 }
 
 /* --- Forms --------------------------------------------------------------- */
-form { display: flex; flex-direction: column; gap: 14px; }
-label { color: var(--text-h); font-weight: 600; font-size: 0.9rem; }
-input, select, textarea {
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+label {
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+input,
+select,
+textarea {
   width: 100%;
+  min-height: var(--tap);
   padding: 12px 14px;
   font: inherit;
-  color: var(--text-h);
-  background: var(--surface-2);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
+  color: var(--ink);
+  background: var(--paper);
+  border: 1.5px solid var(--line-2);
+  border-radius: var(--r-btn);
 }
-input::placeholder { color: var(--text-dim); }
-input:focus { border-color: var(--brand-1); background: var(--surface); }
+input::placeholder {
+  color: var(--ink-2);
+}
+input:focus {
+  border-color: var(--gold);
+  background: var(--card);
+}
 
 .divider {
-  display: flex; align-items: center; gap: 12px;
-  color: var(--text-dim); font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink-2);
+  font-size: 0.85rem;
 }
-.divider::before, .divider::after {
-  content: ''; height: 1px; flex: 1; background: var(--border);
+.divider::before,
+.divider::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: var(--line);
 }
 
-/* --- Badges & alerts ----------------------------------------------------- */
+/* --- Badges, stickers & alerts ------------------------------------------- */
 .badge {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 4px 10px; border-radius: 999px;
-  font-size: 0.78rem; font-weight: 650;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: var(--r-chip);
+  font-size: 0.78rem;
+  font-weight: 700;
 }
-.badge-good { color: var(--good); background: var(--good-soft); }
-.badge-idle { color: var(--text-dim); background: var(--surface-2); }
+.badge-good {
+  color: var(--good);
+  background: var(--good-soft);
+}
+.badge-idle {
+  color: var(--ink-2);
+  background: var(--paper-2);
+}
+
+/* Tilted sticker — the quirk, used once or twice per screen at most. */
+.sticker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 13px;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1.5px solid var(--ink);
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 0.82rem;
+  box-shadow: var(--sticker-shadow);
+  transform: rotate(-3deg);
+  transition: transform 0.18s ease;
+}
+.sticker:hover {
+  transform: rotate(0deg) scale(1.04);
+}
+.sticker--gold {
+  background: var(--gold);
+  border-color: transparent;
+  color: #3a2600;
+}
+
 [role='alert'] {
   color: var(--bad);
   background: var(--bad-soft);
   border: 1px solid color-mix(in srgb, var(--bad) 30%, transparent);
-  padding: 10px 14px;
-  border-radius: var(--radius-sm);
-  font-weight: 550;
+  padding: 12px 14px;
+  border-radius: var(--r-btn);
+  font-weight: 600;
 }
 .toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
   padding: 12px 14px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-btn);
   box-shadow: var(--shadow);
 }
 
-/* --- Empty state --------------------------------------------------------- */
+/* --- Empty state = onboarding surface ------------------------------------ */
 .empty {
   text-align: center;
-  padding: 48px 24px;
-  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  padding: clamp(28px, 5vw, 44px) 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
 }
 .empty__icon {
-  width: 64px; height: 64px; border-radius: 20px;
-  background: var(--brand-grad);
+  width: 62px;
+  height: 62px;
+  border-radius: 19px;
+  display: grid;
+  place-items: center;
+  font-size: 1.7rem;
+  background: radial-gradient(circle at 30% 25%, #ffd98a, var(--gold) 62%);
   box-shadow: var(--shadow-lg);
+  transform: rotate(-6deg);
 }
-.empty h2 { margin-bottom: 2px; }
-.empty p { max-width: 42ch; color: var(--text-dim); }
+.empty p {
+  max-width: 46ch;
+  color: var(--ink-2);
+}
 
-/* --- Auth screen --------------------------------------------------------- */
+/* Ghost preview: shows the SHAPE of success behind the CTA. */
+.ghost {
+  position: relative;
+  margin-top: 6px;
+  width: 100%;
+  max-width: 380px;
+  border-radius: var(--r-card);
+  overflow: hidden;
+  /* The TOTAL line is the payoff, so it must stay fully readable — fade only
+     the last sliver so the preview reads as "a real receipt continues here"
+     rather than clipping the very number that makes linking worth it. */
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 86%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 86%, transparent 100%);
+  opacity: 0.72;
+  filter: saturate(0.8);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* --- Receipt ------------------------------------------------------------- */
+.receipt {
+  position: relative;
+  background: var(--card);
+  background-image: repeating-linear-gradient(var(--receipt-line) 0 1px, transparent 1px 26px);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 22px 20px 18px;
+  font-family: var(--mono);
+  box-shadow: var(--shadow);
+}
+.receipt__head {
+  text-align: center;
+  margin-bottom: 12px;
+}
+.receipt__store {
+  font-family: var(--sans);
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  font-size: 0.98rem;
+}
+.receipt__meta {
+  font-size: 0.7rem;
+  color: var(--ink-2);
+  margin-top: 4px;
+  letter-spacing: 0.04em;
+}
+.receipt hr {
+  border: 0;
+  border-top: 1.5px dashed var(--line-2);
+  margin: 11px 0;
+}
+.receipt hr.double {
+  border-top: 3px double var(--line-2);
+}
+.r-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  padding: 3px 0;
+}
+.r-line .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+.r-line .nm {
+  flex: 1;
+  letter-spacing: 0.02em;
+}
+.r-line .qty {
+  color: var(--ink-2);
+  font-size: 0.74rem;
+}
+.r-line .pr {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  min-width: 62px;
+  text-align: right;
+}
+.r-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-family: var(--sans);
+  font-weight: 900;
+  font-size: 1.1rem;
+  letter-spacing: 0.02em;
+  padding: 3px 0;
+}
+.r-total .v {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.receipt__caption {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-2);
+  margin-bottom: 5px;
+}
+.receipt__thanks {
+  text-align: center;
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 0.8rem;
+  margin-top: 12px;
+}
+
+/* --- Link / sync rows ---------------------------------------------------- */
+.link-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.link-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 16px 18px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow);
+}
+.link-list h2,
+.link-list h3 {
+  font-size: 1rem;
+  margin: 0 0 3px;
+}
+.link-list p {
+  color: var(--ink-2);
+  font-size: 0.86rem;
+}
+
+.skeleton,
+.link-list__skeleton {
+  height: 78px;
+  border-radius: var(--r-card);
+  border: 1px solid var(--line);
+  background: linear-gradient(90deg, var(--card) 25%, var(--paper-2) 37%, var(--card) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+}
+@keyframes shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+/* --- Auth ---------------------------------------------------------------- */
 .auth {
   min-height: 100svh;
   display: grid;
   place-items: center;
   padding: 24px;
 }
-.auth__card { width: 100%; max-width: 400px; }
+.auth__card {
+  width: 100%;
+  max-width: 410px;
+  /* The card stacks form / divider / SSO / trust note; without an explicit gap
+     these block children sit flush against each other. */
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
 .auth__brand {
-  display: flex; flex-direction: column; align-items: center; gap: 12px;
-  margin-bottom: 22px; text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  text-align: center;
 }
-.auth__brand .brand__mark { width: 44px; height: 44px; border-radius: 13px; }
-
-/* --- Link/list rows ------------------------------------------------------ */
-.link-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
-.link-list li {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-  padding: 16px 18px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+.auth__brand .brand__mark {
+  width: 52px;
+  height: 52px;
+  border-radius: 15px;
+  font-size: 1.6rem;
 }
-.link-list h2, .link-list h3 { font-size: 1rem; margin: 0 0 2px; }
-
-/* --- Skeleton shimmer ---------------------------------------------------- */
-.skeleton, .link-list__skeleton {
-  height: 74px;
-  border-radius: var(--radius);
-  background: linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 37%, var(--surface) 63%);
-  background-size: 400% 100%;
-  animation: shimmer 1.4s ease infinite;
-}
-@keyframes shimmer {
-  0% { background-position: 100% 50%; }
-  100% { background-position: 0 50%; }
+.auth__trust {
+  text-align: center;
+  font-size: 0.76rem;
+  color: var(--ink-2);
+  margin-top: 4px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
-}
-
-/* --- Screen-reader-only ---------------------------------------------------- */
+/* --- Screen-reader-only --------------------------------------------------- */
 .sr-only {
   position: absolute;
-  width: 1px; height: 1px;
-  padding: 0; margin: -1px;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
 }
 
-/* --- Charts (hand-built, no charting library — see FR-3 feature note §5) - */
+/* --- Charts (hand-built, no charting library — see FR-3 feature note §5) ---
+   Ported onto the new tokens: the old --text-h / --surface-2 / --brand-grad
+   no longer exist, so these rules would otherwise render unstyled. */
 .chart-trend__scroll {
   overflow-x: auto;
   padding-bottom: 4px;
@@ -347,18 +786,32 @@ input:focus { border-color: var(--brand-1); background: var(--surface); }
   justify-content: space-between;
   gap: 12px;
   font-size: 0.88rem;
-  font-weight: 600;
-  color: var(--text-h);
+  font-weight: 650;
+  color: var(--ink);
   margin-bottom: 4px;
+}
+.chart-breakdown__row .num,
+.chart-breakdown__row span:last-child {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
 }
 .chart-breakdown__track {
   height: 8px;
   border-radius: 999px;
-  background: var(--surface-2);
+  background: var(--paper-2);
   overflow: hidden;
 }
 .chart-breakdown__fill {
   height: 100%;
   border-radius: 999px;
-  background: var(--brand-grad);
+  background: linear-gradient(90deg, var(--gold), #f58a00);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }
