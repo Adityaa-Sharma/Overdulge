@@ -77,6 +77,75 @@ def test_upsert_linked_account_sends_on_conflict_and_payload():
     }
 
 
+def test_set_tokens_sends_partial_upsert_with_only_tokens_encrypted():
+    captured: list[httpx.Request] = []
+    client = _client_returning([{"user_id": "u1", "platform": "swiggy"}], captured)
+
+    linked_accounts.set_tokens(client, user_id="u1", platform="swiggy", tokens_encrypted="new-ct")
+
+    request = captured[0]
+    assert request.url.params["on_conflict"] == "user_id,platform"
+    body = json.loads(request.content)
+    assert body == {"user_id": "u1", "platform": "swiggy", "tokens_encrypted": "new-ct"}
+
+
+def test_set_sync_status_preserves_orders_captured_last_run_from_passed_in_state():
+    captured: list[httpx.Request] = []
+    client = _client_returning([{"user_id": "u1", "platform": "swiggy"}], captured)
+
+    linked_accounts.set_sync_status(
+        client,
+        user_id="u1",
+        platform="swiggy",
+        sync_state={"orders_captured_last_run": {"swiggy_food": 4}, "last_error": "stale"},
+        status="syncing",
+        syncing_since="2026-07-23T00:00:00Z",
+    )
+
+    request = captured[0]
+    assert request.url.params["on_conflict"] == "user_id,platform"
+    body = json.loads(request.content)
+    assert body == {
+        "user_id": "u1",
+        "platform": "swiggy",
+        "sync_state": {
+            "orders_captured_last_run": {"swiggy_food": 4},
+            "status": "syncing",
+            "syncing_since": "2026-07-23T00:00:00Z",
+            "last_error": None,
+        },
+    }
+
+
+def test_record_sync_result_writes_last_sync_at_and_resets_lock():
+    captured: list[httpx.Request] = []
+    client = _client_returning([{"user_id": "u1", "platform": "swiggy"}], captured)
+
+    linked_accounts.record_sync_result(
+        client,
+        user_id="u1",
+        platform="swiggy",
+        sync_state={
+            "status": "syncing",
+            "syncing_since": "2026-07-23T00:00:00Z",
+            "last_error": "prev",
+        },
+        orders_captured={"swiggy_food": 4, "swiggy_instamart": 1},
+        synced_at="2026-07-23T01:00:00Z",
+    )
+
+    request = captured[0]
+    body = json.loads(request.content)
+    assert body["user_id"] == "u1"
+    assert body["last_sync_at"] == "2026-07-23T01:00:00Z"
+    assert body["sync_state"] == {
+        "status": "idle",
+        "syncing_since": None,
+        "last_error": None,
+        "orders_captured_last_run": {"swiggy_food": 4, "swiggy_instamart": 1},
+    }
+
+
 def test_delete_linked_account_filters_by_user_and_platform():
     captured: list[httpx.Request] = []
     client = _client_returning([], captured)
