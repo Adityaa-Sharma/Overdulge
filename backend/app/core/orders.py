@@ -40,3 +40,12 @@ def get_order(
 
 def list_order_items(client: PostgrestClient, *, order_id: str) -> list[dict[str, Any]]:
     return client.select("order_items", filters={"order_id": f"eq.{order_id}"})
+
+
+def list_order_items_for_orders(
+    client: PostgrestClient, *, order_ids: list[str]
+) -> list[dict[str, Any]]:
+    """Every `order_items` row belonging to any of `order_ids`, in one call."""
+    if not order_ids:
+        return []
+    return client.select("order_items", filters={"order_id": f"in.({','.join(order_ids)})"})
