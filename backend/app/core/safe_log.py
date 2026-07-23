@@ -29,6 +29,14 @@ _ALLOWED_FIELDS = {
     "duration_ms",
     "error_type",
     "sync_state_key",
+    # `failure_reason` carries a short diagnostic built from status codes, our
+    # own configuration names, and upstream *error codes* — never an upstream
+    # response body, request payload, or anything derived from an order. It
+    # exists because `error_type` alone ("OAuthError") cannot distinguish "the
+    # platform refused our callback domain" from "the platform was down", and
+    # that distinction is the difference between a fixable report and a shrug.
+    # Producers are responsible for keeping third-party text out of it.
+    "failure_reason",
 }
 
 _logger = logging.getLogger("overdulge")

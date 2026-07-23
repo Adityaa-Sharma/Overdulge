@@ -21,12 +21,23 @@ from app.core import linked_accounts
 from app.core.auth import AuthedUser, get_current_user
 from app.core.config import get_settings
 from app.core.db import user_client
+from app.core.safe_log import log_event
 from app.oauth import engine
 from app.oauth.platforms import swiggy, zepto
 
 router = APIRouter()
 
 _PLATFORMS = {"swiggy": swiggy.CONFIG, "zepto": zepto.CONFIG}
+_PLATFORM_LABELS = {"swiggy": "Swiggy", "zepto": "Zepto"}
+
+# Shown to the user verbatim, so they say what is actually true. Telling
+# someone to "try again" when the platform has refused our callback domain
+# sends them into a loop that cannot succeed.
+_PERMANENT_DETAIL = (
+    "{platform} isn't accepting Overdulge's connection request right now. "
+    "This needs a fix on our side — retrying won't help."
+)
+_TRANSIENT_DETAIL = "Couldn't reach {platform} to start linking. Please try again in a moment."
 
 
 def _platform_config(platform: str) -> engine.PlatformConfig:
@@ -40,8 +51,32 @@ def _platform_config(platform: str) -> engine.PlatformConfig:
 
 @router.post("/links/{platform}/start")
 async def start_link(platform: str, user: AuthedUser = Depends(get_current_user)) -> dict[str, str]:
+    """Begins the OAuth flow and returns the URL to send the browser to.
+
+    Discovery and dynamic client registration both talk to the platform, so a
+    failure here is an upstream-dependency failure (502), not an unhandled
+    server fault. It used to surface as a bare 500 with nothing in the logs,
+    which made the endpoint impossible to diagnose from the outside.
+    """
     config = _platform_config(platform)
-    result = engine.start_link(config, user_id=user.user_id)
+    try:
+        result = engine.start_link(config, user_id=user.user_id)
+    except engine.OAuthError as exc:
+        log_event(
+            "error",
+            "link start failed",
+            user_id=user.user_id,
+            platform=config.name,
+            route="POST /links/{platform}/start",
+            error_type=type(exc).__name__,
+            failure_reason=str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(_PERMANENT_DETAIL if exc.permanent else _TRANSIENT_DETAIL).format(
+                platform=_PLATFORM_LABELS[config.name]
+            ),
+        ) from exc
     return {"authorization_url": result.authorization_url}
 
 

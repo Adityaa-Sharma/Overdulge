@@ -105,6 +105,111 @@ def test_start_link_returns_authorization_url_for_zepto(monkeypatch: pytest.Monk
     assert response.json() == {"authorization_url": "https://auth.zepto.co.in/authorize?x=1"}
 
 
+def _raise_oauth_error(message: str, *, permanent: bool):
+    def _start_link(config, *, user_id):
+        raise engine.OAuthError(message, permanent=permanent)
+
+    return _start_link
+
+
+def test_start_link_maps_oauth_failure_to_502_not_500(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The whole point of the mapping: discovery/DCR talk to a third party, so
+    their failure is an upstream fault. Returning 500 told the operator nothing
+    and told the user nothing — this endpoint 500'd in production for days.
+    """
+    monkeypatch.setattr(
+        links_module.engine,
+        "start_link",
+        _raise_oauth_error("metadata discovery failed (503)", permanent=False),
+    )
+
+    response = client.post(
+        "/api/v1/links/swiggy/start", headers={"Authorization": f"Bearer {_make_token()}"}
+    )
+
+    assert response.status_code == 502
+    assert "Swiggy" in response.json()["detail"]
+
+
+def test_start_link_tells_the_user_to_retry_only_when_retrying_could_work(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        links_module.engine,
+        "start_link",
+        _raise_oauth_error("temporarily unreachable", permanent=False),
+    )
+
+    detail = client.post(
+        "/api/v1/links/zepto/start", headers={"Authorization": f"Bearer {_make_token()}"}
+    ).json()["detail"]
+
+    assert "try again" in detail.lower()
+
+
+def test_start_link_does_not_suggest_retrying_a_permanent_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A rejected registration fails identically every time. Telling the user
+    to try again sends them round a loop that cannot succeed.
+    """
+    monkeypatch.setattr(
+        links_module.engine,
+        "start_link",
+        _raise_oauth_error(
+            "dynamic client registration failed (400: invalid_redirect_uri)", permanent=True
+        ),
+    )
+
+    detail = client.post(
+        "/api/v1/links/zepto/start", headers={"Authorization": f"Bearer {_make_token()}"}
+    ).json()["detail"]
+
+    assert "Zepto" in detail
+    assert "retrying won't help" in detail.lower()
+
+
+def test_start_link_failure_detail_never_leaks_the_upstream_error_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The internal message can quote a third-party server; it belongs in the
+    logs, not in a response body echoed back to the browser.
+    """
+    monkeypatch.setattr(
+        links_module.engine,
+        "start_link",
+        _raise_oauth_error("registration failed at https://internal.host/register", permanent=True),
+    )
+
+    detail = client.post(
+        "/api/v1/links/swiggy/start", headers={"Authorization": f"Bearer {_make_token()}"}
+    ).json()["detail"]
+
+    assert "internal.host" not in detail
+
+
+def test_start_link_logs_the_failure_reason(monkeypatch: pytest.MonkeyPatch, caplog) -> None:
+    """Without this the operator is back to guessing — which is exactly the
+    position the original bare 500 left us in.
+    """
+    monkeypatch.setattr(
+        links_module.engine,
+        "start_link",
+        _raise_oauth_error(
+            "dynamic client registration failed (400: invalid_redirect_uri)", permanent=True
+        ),
+    )
+
+    with caplog.at_level("ERROR", logger="overdulge"):
+        client.post(
+            "/api/v1/links/zepto/start", headers={"Authorization": f"Bearer {_make_token()}"}
+        )
+
+    record = next(r for r in caplog.records if r.message == "link start failed")
+    assert record.platform == "zepto"
+    assert "invalid_redirect_uri" in record.failure_reason
+
+
 def test_callback_redirects_with_status_ok_for_zepto(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(links_module.engine, "handle_callback", lambda config, *, code, state: True)
 
