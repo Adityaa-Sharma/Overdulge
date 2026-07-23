@@ -101,7 +101,11 @@ talks to the canonical schema or the generic OAuth engine.
    decrypts tokens in-memory only → `mcp/client.py` calls the platform's
    read-only history tool(s) → `sync/normalize.py` maps to the canonical
    schema (BRD §5) → idempotent upsert via PostgREST keyed on
-   `(platform, platform_order_id)`.
+   `(platform, platform_order_id)`. A `linked_accounts` row for `platform =
+   "swiggy"` fans out into two `orders.platform` values, `swiggy_food` and
+   `swiggy_instamart` — see ADR-0005. The manual "Sync now" button calls the
+   same per-account sync function as the cron loop, guarded by an in-flight
+   lock in `sync_state`.
 5. **Reads** (dashboard, NL query, budgets, calories, recommendations):
    backend reads the canonical schema scoped to the authenticated user. See
    ADR-0002 for how RLS is enforced on these reads vs. the service-role
@@ -178,3 +182,7 @@ See `docs/architecture/decisions/`:
   "usuals" ranking source per platform, live (never cached) alternative
   matching, shared calorie-estimation function reuse, adapter-owned
   redirect URLs.
+- [ADR-0005](decisions/0005-order-sync-and-normalization.md) — MCP client /
+  adapter / normalize split, one shared sync-core function for cron +
+  manual trigger with an in-flight lock, and why a single `swiggy` linked
+  account fans out into `swiggy_food` + `swiggy_instamart` orders.
