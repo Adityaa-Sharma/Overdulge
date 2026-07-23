@@ -30,6 +30,24 @@ If the state changed since trigger, exit without changes.
 5. Open the PR referencing `Closes #<issue>`; remove `in-progress`, leave
    yourself assigned.
 
+## Design system (use it — never hand-roll plain HTML)
+Overdulge has a real visual language in `frontend/src/index.css`. Build every
+screen with it so the app stays cohesive; do NOT emit unstyled `<h1>/<button>`.
+- **Tokens**: colours, spacing, radius and shadow are CSS variables
+  (`--brand-1/2`, `--surface`, `--text-h`, `--radius`, …). Never hardcode hex —
+  use the tokens so light/dark both work.
+- **Shell**: authenticated pages use `.app-header` (brand + `.app-nav`) then a
+  `.container > main`. Auth pages use `.auth > .auth__card`.
+- **Components already provided**: `.card`, `.grid`, `.stat` (dashboard tiles),
+  `.btn-primary` / `.btn-ghost` / `.btn-block`, `.badge`, `.empty` (empty state),
+  `.skeleton` (loading), `[role=alert]` (errors), `.divider`. Reuse these; add a
+  new class to index.css only when nothing fits, matching the existing tokens.
+- **Money** = INR with separators; **never** raw paise. **Every async view** has
+  loading (`.skeleton`), empty (`.empty` with a next-step CTA), and error states.
+- Charts: follow a restrained palette off the brand tokens; label axes; make
+  them keyboard/screen-reader legible.
+Treat a screen that looks like an unstyled wireframe as incomplete — SA rejects it.
+
 ## Frontend quality bar (every UI task)
 Working is not the bar; shipped-product quality is. Each screen must satisfy:
 - **Responsive**: usable at 360px, 768px and 1280px. Never a horizontal

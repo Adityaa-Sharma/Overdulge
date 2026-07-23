@@ -57,9 +57,13 @@ export default function Login() {
   }
 
   return (
-    <main>
-      <h1>Log in</h1>
-      <p>Sign in with your email or a Google account to continue.</p>
+    <div className="auth">
+      <div className="auth__card card card--pad-lg">
+        <div className="auth__brand">
+          <span className="brand__mark" aria-hidden="true" />
+          <h1>Welcome to Overdulge</h1>
+          <p className="muted">Sign in to see where your food spend really goes.</p>
+        </div>
 
       {error && <p role="alert">{error}</p>}
 
@@ -76,7 +80,7 @@ export default function Login() {
             onChange={(event) => setEmail(event.target.value)}
             disabled={pending === 'otp-request'}
           />
-          <button type="submit" disabled={pending === 'otp-request'}>
+          <button className="btn-primary btn-block" type="submit" disabled={pending === 'otp-request'}>
             {pending === 'otp-request' ? 'Sending code…' : 'Send code'}
           </button>
         </form>
@@ -84,9 +88,9 @@ export default function Login() {
 
       {stage === 'verify' && (
         <form onSubmit={handleVerifyOtp}>
-          <p>
+          <p className="muted">
             We emailed a code to {email}.{' '}
-            <button type="button" onClick={() => setStage('request')}>
+            <button className="btn-ghost" type="button" onClick={() => setStage('request')}>
               Use a different email
             </button>
           </p>
@@ -102,17 +106,18 @@ export default function Login() {
             onChange={(event) => setOtp(event.target.value)}
             disabled={pending === 'otp-verify'}
           />
-          <button type="submit" disabled={pending === 'otp-verify'}>
+          <button className="btn-primary btn-block" type="submit" disabled={pending === 'otp-verify'}>
             {pending === 'otp-verify' ? 'Verifying…' : 'Verify code'}
           </button>
         </form>
       )}
 
-      <p>
-        <button type="button" onClick={handleGoogleSignIn} disabled={pending === 'google'}>
+        <div className="divider">or</div>
+
+        <button className="btn-block" type="button" onClick={handleGoogleSignIn} disabled={pending === 'google'}>
           {pending === 'google' ? 'Redirecting…' : 'Continue with Google'}
         </button>
-      </p>
-    </main>
+      </div>
+    </div>
   )
 }
