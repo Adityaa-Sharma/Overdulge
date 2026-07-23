@@ -108,6 +108,39 @@ always-present note in the sync status response for `platform ==
 "swiggy_instamart"` — it is a property of the platform, not something
 computed from sync history, so no extra tracking state is needed.
 
+### 6. `sync_state` shape, and the status/manual-trigger API contract
+`linked_accounts` has one row per `(user_id, platform)` where `platform` is
+the *link*-level enum (`swiggy`/`zepto`, two values) — but AC-10 asks for
+sync status "per platform" using the three-value `orders.platform` sense
+(`swiggy_food`/`swiggy_instamart`/`zepto`), because Food and Instamart are
+counted separately. `run_sync_for_account` therefore writes
+`orders_captured_last_run` as an object keyed by `orders.platform`, not a
+bare int, so the `swiggy` row can report both sub-platforms from one lock:
+
+```json
+{
+  "status": "idle",
+  "last_error": null,
+  "last_run_at": "2026-07-23T03:00:00Z",
+  "orders_captured_last_run": {"swiggy_food": 4, "swiggy_instamart": 1}
+}
+```
+
+Zepto's row uses the same shape with a single key (`{"zepto": N}`) rather
+than a bare int, so both the status endpoint and its tests handle one shape,
+not two. `GET /api/v1/sync/status` (user-JWT-forwarding) flattens both
+`linked_accounts` rows into one array of exactly the three `orders.platform`
+values (omitting ones with no linked account at all — a platform the user
+never linked has no row and is left out, not shown as an empty/error
+entry): `[{platform, last_sync_at, orders_captured_last_run, warning}]`,
+where `warning` is the static Instamart string (§5) for
+`swiggy_instamart` and `null` otherwise. `POST /api/v1/sync/{platform}`
+takes an `orders.platform` value too (`swiggy_food` and `swiggy_instamart`
+both resolve to the underlying `swiggy` `linked_accounts` row and, per §4,
+still run *both* sub-platform adapters in one call — a manual sync of
+either Swiggy surface refreshes both, since they share one lock and one
+token) and returns the same per-platform-keyed shape as its response body.
+
 ## Consequences
 
 - Adapters are the only place that can violate NFR-1 by construction (they
