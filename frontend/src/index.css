@@ -50,3 +50,66 @@ h1 {
 p {
   margin: 0;
 }
+
+main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 100%;
+}
+
+label {
+  color: var(--text-h);
+  font-weight: 500;
+}
+
+input {
+  width: 100%;
+  max-width: 320px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  font: inherit;
+  color: var(--text-h);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+button {
+  align-self: flex-start;
+  padding: 10px 16px;
+  font: inherit;
+  color: var(--text-h);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--text-h);
+  outline-offset: 2px;
+}
+
+[role='alert'] {
+  color: #b3261e;
+  font-weight: 500;
+}
+
+@media (prefers-color-scheme: dark) {
+  [role='alert'] {
+    color: #ff6b60;
+  }
+}
