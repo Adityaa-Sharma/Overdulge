@@ -3,6 +3,7 @@ import { SessionProvider } from './lib/session'
 import Login from './routes/Login'
 import Protected from './routes/Protected'
 import RequireAuth from './routes/RequireAuth'
+import Settings from './routes/Settings'
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route element={<RequireAuth />}>
             <Route path="/" element={<Protected />} />
+            <Route path="/settings" element={<Settings />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
