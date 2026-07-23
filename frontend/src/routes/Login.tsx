@@ -1,7 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useSession } from '../lib/session'
-import { requestEmailOtp, signInWithGoogle, verifyEmailOtp } from '../lib/supabase'
+import {
+  isEmailRateLimitError,
+  requestEmailOtp,
+  signInWithGoogle,
+  verifyEmailOtp,
+} from '../lib/supabase'
 
 type Stage = 'request' | 'verify'
 type Pending = 'otp-request' | 'otp-verify' | 'google' | null
@@ -25,8 +30,14 @@ export default function Login() {
     try {
       await requestEmailOtp(email)
       setStage('verify')
-    } catch {
-      setError('Could not send the code. Check the email address and try again.')
+    } catch (cause) {
+      // Blaming the address for a spent send quota sends the user off fixing
+      // an email that was never wrong.
+      setError(
+        isEmailRateLimitError(cause)
+          ? 'Too many codes requested just now. Wait a few minutes, or continue with Google.'
+          : 'Could not send the code. Check the email address and try again.',
+      )
     } finally {
       setPending(null)
     }
@@ -101,7 +112,10 @@ export default function Login() {
               Use a different email
             </button>
           </p>
-          <label htmlFor="otp">6-digit code</label>
+          {/* Deliberately not "6-digit code": the length is a Supabase project
+              setting (this project issues 8), so naming a number here puts the
+              copy one dashboard toggle away from being wrong. */}
+          <label htmlFor="otp">Code from your email</label>
           <input
             id="otp"
             name="otp"

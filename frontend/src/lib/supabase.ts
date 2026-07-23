@@ -40,6 +40,19 @@ export async function requestEmailOtp(email: string): Promise<void> {
   if (error) throw error
 }
 
+/**
+ * True when Supabase refused to send because the project's email quota is
+ * spent, not because anything about the request was wrong.
+ *
+ * This is worth singling out: the address the user typed is fine, so telling
+ * them to check it sends them off correcting something that was never broken.
+ */
+export function isEmailRateLimitError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false
+  const { code, status } = error as { code?: unknown; status?: unknown }
+  return code === 'over_email_send_rate_limit' || status === 429
+}
+
 /** Verifies the passcode sent by {@link requestEmailOtp}, establishing a session on success. */
 export async function verifyEmailOtp(email: string, token: string): Promise<void> {
   const { error } = await getSupabaseClient().auth.verifyOtp({ email, token, type: 'email' })
