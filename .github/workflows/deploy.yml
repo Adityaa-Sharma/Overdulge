@@ -31,6 +31,20 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
       - if: steps.check.outputs.go == 'true'
         uses: google-github-actions/setup-gcloud@v2
+      # Runs BEFORE the new revision starts serving, so the container never
+      # comes up against a schema it expects but the database does not have.
+      # The runner tracks applied versions in public.schema_migrations, so this
+      # is a no-op once the database is current.
+      - name: Apply database migrations
+        if: steps.check.outputs.go == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          cd backend
+          pip install --quiet uv
+          uv run --no-project --with 'psycopg[binary]' python scripts/migrate.py
+
       - name: Build, push, and deploy to Cloud Run
         if: steps.check.outputs.go == 'true'
         env:
