@@ -56,17 +56,20 @@ export default function TrendChart({ title, points }: TrendChartProps) {
                   y={CHART_HEIGHT + 16}
                   textAnchor="middle"
                   fontSize="10"
-                  fill="var(--text-dim)"
+                  fill="var(--ink-2)"
                 >
                   {formatShortDate(point.periodStart)}
                 </text>
               </g>
             )
           })}
+          {/* The redesign renamed the palette tokens; the old --brand-*
+              gradient stops resolved to nothing and every bar rendered black.
+              These are the current marigold tokens. */}
           <defs>
             <linearGradient id="trend-bar-fill" x1="0" y1="1" x2="0" y2="0">
-              <stop offset="0%" stopColor="var(--brand-1)" />
-              <stop offset="100%" stopColor="var(--brand-2)" />
+              <stop offset="0%" stopColor="var(--gold-deep)" />
+              <stop offset="100%" stopColor="var(--gold)" />
             </linearGradient>
           </defs>
         </svg>
