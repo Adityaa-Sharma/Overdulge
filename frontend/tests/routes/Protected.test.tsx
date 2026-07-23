@@ -1,42 +1,27 @@
-import { render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import Login from '../../src/routes/Login'
 import Protected from '../../src/routes/Protected'
 
-const { getSession } = vi.hoisted(() => ({ getSession: vi.fn() }))
+const { useSession } = vi.hoisted(() => ({ useSession: vi.fn() }))
 
-vi.mock('../../src/lib/supabase', () => ({ getSession }))
+vi.mock('../../src/lib/session', () => ({ useSession }))
 
-function renderAtRoot() {
-  render(
-    <MemoryRouter initialEntries={['/']}>
-      <Routes>
-        <Route path="/" element={<Protected />} />
-        <Route path="/login" element={<Login />} />
-      </Routes>
-    </MemoryRouter>,
-  )
-}
+describe('Protected placeholder page', () => {
+  it('renders the signed-in placeholder', () => {
+    useSession.mockReturnValue({ logout: vi.fn() })
 
-describe('Protected route guard', () => {
-  it('redirects to /login when there is no session', async () => {
-    getSession.mockResolvedValue(null)
+    render(<Protected />)
 
-    renderAtRoot()
-
-    await waitFor(() =>
-      expect(screen.getByRole('heading', { name: /log in/i })).toBeInTheDocument(),
-    )
+    expect(screen.getByRole('heading', { name: /overdulge/i })).toBeInTheDocument()
   })
 
-  it('renders the protected placeholder when a session exists', async () => {
-    getSession.mockResolvedValue({ access_token: 'token' })
+  it('calls logout when the log out button is clicked', async () => {
+    const logout = vi.fn().mockResolvedValue(undefined)
+    useSession.mockReturnValue({ logout })
 
-    renderAtRoot()
+    render(<Protected />)
+    fireEvent.click(screen.getByRole('button', { name: /log out/i }))
 
-    await waitFor(() =>
-      expect(screen.getByRole('heading', { name: /overdulge/i })).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(logout).toHaveBeenCalledTimes(1))
   })
 })
