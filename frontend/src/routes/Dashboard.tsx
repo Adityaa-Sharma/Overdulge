@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getDashboard, type DashboardResponse, type SyncPlatform } from '../lib/api'
 import { formatPaise } from '../lib/format'
-import { useSession } from '../lib/session'
 import CategoryBreakdownChart from '../components/charts/CategoryBreakdownChart'
 import TrendChart from '../components/charts/TrendChart'
 
@@ -16,9 +15,19 @@ const PLATFORM_LABELS: Record<SyncPlatform, string> = {
 
 const PLATFORMS: SyncPlatform[] = ['swiggy_food', 'swiggy_instamart', 'zepto']
 
+const GHOST_ROWS = [
+  { name: 'SWIGGY FOOD', qty: '14x', amount: '4,930', color: 'var(--swiggy)' },
+  { name: 'INSTAMART', qty: '11x', amount: '3,820', color: 'var(--instamart)' },
+  { name: 'ZEPTO', qty: '9x', amount: '3,730', color: 'var(--zepto)' },
+]
+
+const PROMISES = [
+  { icon: '🧾', label: 'One itemised receipt' },
+  { icon: '🌙', label: 'Late-night patterns' },
+  { icon: '🎯', label: 'Budgets that nudge' },
+]
+
 export default function Dashboard() {
-  const { logout } = useSession()
-  const [loggingOut, setLoggingOut] = useState(false)
   const [loadState, setLoadState] = useState<LoadState>('loading')
   const [data, setData] = useState<DashboardResponse | null>(null)
 
@@ -37,80 +46,110 @@ export default function Dashboard() {
     fetchDashboard()
   }, [fetchDashboard])
 
-  async function handleLogout() {
-    setLoggingOut(true)
-    try {
-      await logout()
-    } finally {
-      setLoggingOut(false)
-    }
-  }
+  return (
+    <main>
+      <div className="page-head">
+        <span className="eyebrow">Your spend</span>
+        <h1>Dashboard</h1>
+      </div>
 
+      {loadState === 'loading' && (
+        <section aria-busy="true" aria-label="Loading dashboard">
+          <div className="grid">
+            <div className="skeleton" />
+            <div className="skeleton" />
+            <div className="skeleton" />
+          </div>
+        </section>
+      )}
+
+      {loadState === 'error' && (
+        <section className="card card--pad-lg">
+          <div role="alert">
+            <p>Couldn't load your dashboard.</p>
+            <button type="button" onClick={fetchDashboard}>
+              Retry
+            </button>
+          </div>
+        </section>
+      )}
+
+      {loadState === 'ready' && data && !data.has_data && <OnboardingEmptyState />}
+
+      {loadState === 'ready' && data && data.has_data && <PopulatedDashboard data={data} />}
+    </main>
+  )
+}
+
+/**
+ * Zero-data screen, built as an onboarding surface rather than a dead end.
+ *
+ * Empty-state research is consistent that first-run screens should name the
+ * value and show the SHAPE of success, not announce absence — so this leads
+ * with what the user gets and previews a muted sample receipt. Finance
+ * onboarding also converts on trust, hence the read-only promise sits right
+ * at the point of decision.
+ */
+function OnboardingEmptyState() {
   return (
     <>
-      <header className="app-header">
-        <span className="brand">
-          <span className="brand__mark" aria-hidden="true" />
-          Overdulge
-        </span>
-        <nav className="app-nav">
-          <Link to="/" aria-current="page">
-            Dashboard
+      <section className="card card--pad-lg" aria-labelledby="onboarding-heading">
+        <div className="empty">
+          <span className="empty__icon" aria-hidden="true">
+            🧾
+          </span>
+
+          <h2 id="onboarding-heading">
+            See exactly where your <span className="hl">food money</span> goes
+          </h2>
+          <p>
+            Connect Swiggy or Zepto and Overdulge turns your order history into one itemised
+            monthly receipt — what you spent, on which app, and the habits hiding behind it.
+          </p>
+
+          <Link className="btn btn-primary" to="/settings">
+            Connect your first account
           </Link>
-          <Link to="/settings">Settings</Link>
-          <button className="btn-ghost" type="button" onClick={handleLogout} disabled={loggingOut}>
-            {loggingOut ? 'Logging out…' : 'Log out'}
-          </button>
-        </nav>
-      </header>
 
-      <div className="container">
-        <main>
-          <div className="stack" style={{ gap: 4 }}>
-            <span className="eyebrow">Your spend</span>
-            <h1>Dashboard</h1>
+          <p className="auth__trust">
+            Read-only access — Overdulge can never place, change, or cancel an order.
+          </p>
+
+          {/* Shape of success. Decorative sample figures, so it is hidden from
+              assistive tech: screen readers must never announce fake spend. */}
+          <div className="ghost" aria-hidden="true">
+            <div className="receipt">
+              <div className="receipt__head">
+                <div className="receipt__store">OVERDULGE</div>
+                <div className="receipt__meta">YOUR MONTH, ITEMISED</div>
+              </div>
+              <hr />
+              {GHOST_ROWS.map((row) => (
+                <div className="r-line" key={row.name}>
+                  <span className="dot" style={{ background: row.color }} />
+                  <span className="nm">{row.name}</span>
+                  <span className="qty">{row.qty}</span>
+                  <span className="pr">{row.amount}</span>
+                </div>
+              ))}
+              <hr className="double" />
+              <div className="r-total">
+                <span>TOTAL</span>
+                <span className="v">₹12,480</span>
+              </div>
+            </div>
           </div>
+        </div>
+      </section>
 
-          {loadState === 'loading' && (
-            <section aria-busy="true" aria-label="Loading dashboard">
-              <div className="grid">
-                <div className="skeleton" />
-                <div className="skeleton" />
-                <div className="skeleton" />
-              </div>
-            </section>
-          )}
-
-          {loadState === 'error' && (
-            <section className="card card--pad-lg">
-              <div role="alert">
-                <p>Couldn't load your dashboard.</p>
-                <button type="button" onClick={fetchDashboard}>
-                  Retry
-                </button>
-              </div>
-            </section>
-          )}
-
-          {loadState === 'ready' && data && !data.has_data && (
-            <section className="card card--pad-lg">
-              <div className="empty">
-                <span className="empty__icon" aria-hidden="true" />
-                <h2>No data yet</h2>
-                <p>
-                  Connect your Swiggy or Zepto account and Overdulge will sync your order
-                  history, then break down where your money and calories are going.
-                </p>
-                <Link className="btn btn-primary" to="/settings">
-                  Link an account
-                </Link>
-              </div>
-            </section>
-          )}
-
-          {loadState === 'ready' && data && data.has_data && <PopulatedDashboard data={data} />}
-        </main>
-      </div>
+      <ul className="row row--center" aria-label="What you get once an account is linked">
+        {PROMISES.map((promise) => (
+          <li className="sticker" key={promise.label}>
+            <span aria-hidden="true">{promise.icon}</span>
+            {promise.label}
+          </li>
+        ))}
+      </ul>
     </>
   )
 }

@@ -118,10 +118,29 @@ describe('Dashboard', () => {
 
     renderDashboard()
 
-    await waitFor(() => expect(screen.getByText(/no data yet/i)).toBeInTheDocument())
-    expect(screen.getByRole('link', { name: /link an account/i })).toBeInTheDocument()
+    // The zero-data screen names the value rather than announcing absence.
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: /see exactly where your food money goes/i }),
+      ).toBeInTheDocument(),
+    )
+    expect(screen.queryByText(/no data yet/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /connect your first account/i })).toBeInTheDocument()
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
     expect(screen.queryByText('Tasty Bites')).not.toBeInTheDocument()
+  })
+
+  it('keeps the sample receipt out of the accessibility tree', async () => {
+    getDashboard.mockResolvedValue(EMPTY_RESPONSE)
+
+    const { container } = renderDashboard()
+
+    await waitFor(() => expect(container.querySelector('.ghost')).not.toBeNull())
+    const ghost = container.querySelector('.ghost')
+    expect(ghost).toHaveAttribute('aria-hidden', 'true')
+    // Fabricated figures must live inside the hidden region so assistive tech
+    // never reads them out as the user's real spend.
+    expect(ghost?.textContent).toContain('₹12,480')
   })
 
   it('shows a retry option when the dashboard fails to load (non-2xx), and recovers on retry', async () => {
@@ -136,7 +155,11 @@ describe('Dashboard', () => {
     getDashboard.mockResolvedValue(EMPTY_RESPONSE)
     fireEvent.click(screen.getByRole('button', { name: /retry/i }))
 
-    await waitFor(() => expect(screen.getByText(/no data yet/i)).toBeInTheDocument())
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: /see exactly where your food money goes/i }),
+      ).toBeInTheDocument(),
+    )
   })
 
   it('renders every populated-response section from a mocked GET /dashboard', async () => {
