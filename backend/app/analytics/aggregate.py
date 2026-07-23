@@ -294,13 +294,24 @@ def budget_progress(
 
 def location_lens(orders: list[Row], *, limit: int = 20) -> list[dict[str, Any]]:
     food_orders = [order for order in orders if order.get("platform") == "swiggy_food"]
-    return _grouped_ranking(
+    ranked = _grouped_ranking(
         food_orders,
         group_key="address_id",
         amount_fn=lambda order: order.get("grand_total_paise") or 0,
         field_name="address_id",
         limit=limit,
     )
+    # Attach a human label per address so the UI can show "Home" rather than an
+    # opaque id. Pick the first non-empty label seen for that address_id.
+    label_by_address_id: dict[Any, str] = {}
+    for order in food_orders:
+        address_id = order.get("address_id")
+        label = order.get("address_label")
+        if address_id is not None and label and address_id not in label_by_address_id:
+            label_by_address_id[address_id] = label
+    for row in ranked:
+        row["address_label"] = label_by_address_id.get(row["address_id"])
+    return ranked
 
 
 def _eligible_item_kcal_by_order(order_items: list[Row]) -> dict[Any, int]:

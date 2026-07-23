@@ -56,7 +56,7 @@ def _order(**overrides) -> NormalizedOrder:
 def test_upsert_orders_builds_order_row_and_upserts_with_on_conflict():
     captured: list[httpx.Request] = []
     client = _client_returning_order_ids(captured)
-    order = _order(vendor_name="Biryani House", address_id="addr1")
+    order = _order(vendor_name="Biryani House", address_id="addr1", address_label="Home")
 
     result = upsert_orders(client, user_id="u1", platform="swiggy_food", orders=[order])
 
@@ -73,6 +73,7 @@ def test_upsert_orders_builds_order_row_and_upserts_with_on_conflict():
             "vendor_name": "Biryani House",
             "platform_order_id": "p1",
             "address_id": "addr1",
+            "address_label": "Home",
             "status": "DELIVERED",
             "is_cancelled": False,
             "ordered_at": "2026-07-20T12:00:00+00:00",

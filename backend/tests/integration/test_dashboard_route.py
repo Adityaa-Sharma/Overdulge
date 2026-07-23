@@ -175,6 +175,7 @@ def test_get_dashboard_populated_fixture_matches_response_contract(fake_user_cli
             "platform": "swiggy_food",
             "vendor_name": "Tasty Bites",
             "address_id": "addr-1",
+            "address_label": "Home",
             "is_cancelled": False,
             "grand_total_paise": 50000,
             "ordered_at": "2026-07-22T09:00:00Z",
@@ -212,7 +213,7 @@ def test_get_dashboard_populated_fixture_matches_response_contract(fake_user_cli
     ]
     assert body["top_products"] == [{"name": "Milk", "spend_paise": 30000, "order_count": 1}]
     assert body["location_lens"] == [
-        {"address_id": "addr-1", "spend_paise": 50000, "order_count": 1}
+        {"address_id": "addr-1", "address_label": "Home", "spend_paise": 50000, "order_count": 1}
     ]
     assert body["order_stats"]["swiggy_food"] == {
         "order_count": 1,

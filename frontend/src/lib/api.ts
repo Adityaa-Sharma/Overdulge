@@ -162,6 +162,7 @@ export interface PlatformOrderStats {
 
 export interface LocationSpend {
   address_id: string
+  address_label: string | null
   spend_paise: number
   order_count: number
 }

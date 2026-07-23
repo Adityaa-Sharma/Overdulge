@@ -43,6 +43,7 @@ def fetch_orders(client: McpCaller, base_url: str, access_token: str) -> list[No
     # back as the `addressId` argument (the two tools name the same value
     # differently — confirmed against the live API).
     address_ids = [address["id"] for address in addresses]
+    label_by_address_id = {address["id"]: _address_label(address) for address in addresses}
 
     raw_orders_by_id: dict[str, dict[str, Any]] = {}
     address_id_by_order_id: dict[str, str] = {}
@@ -57,10 +58,36 @@ def fetch_orders(client: McpCaller, base_url: str, access_token: str) -> list[No
 
     return [
         _normalize_order(
-            client, base_url, access_token, order_id, raw_order, address_id_by_order_id[order_id]
+            client,
+            base_url,
+            access_token,
+            order_id,
+            raw_order,
+            address_id_by_order_id[order_id],
+            label_by_address_id.get(address_id_by_order_id[order_id]),
         )
         for order_id, raw_order in raw_orders_by_id.items()
     ]
+
+
+def _address_label(address: dict[str, Any]) -> str | None:
+    """A human name for the address, for the spend-by-location lens.
+
+    Prefer the user's own tag ("Home", "Work", "Garima"); fall back to the
+    category, then the first, most-specific segment of the full address line.
+    """
+    tag = (address.get("addressTag") or "").strip()
+    if tag:
+        return tag
+    category = (address.get("addressCategory") or "").strip()
+    if category:
+        return category
+    line = (address.get("addressLine") or "").strip()
+    if line:
+        # "Garima: E-135, ..." / "Aditya Sharma: Iiit Lucknow, ..." — the head
+        # before the first comma is the most recognisable part.
+        return line.split(",")[0].strip() or None
+    return None
 
 
 def _normalize_order(
@@ -70,6 +97,7 @@ def _normalize_order(
     order_id: str,
     raw_order: dict[str, Any],
     address_id: str,
+    address_label: str | None,
 ) -> NormalizedOrder:
     detail = client(base_url, access_token, "get_food_order_details", {"orderId": order_id})
     status = raw_order["orderStatus"]
@@ -82,6 +110,7 @@ def _normalize_order(
         raw=raw_order,
         vendor_name=raw_order.get("restaurantName"),
         address_id=address_id,
+        address_label=address_label,
     )
 
 

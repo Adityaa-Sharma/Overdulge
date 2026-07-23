@@ -145,6 +145,32 @@ def test_fetch_orders_parses_formatted_money_string_to_paise(formatted, expected
     assert orders[0].grand_total_paise == expected_paise
 
 
+def test_fetch_orders_captures_the_address_label_for_the_location_lens():
+    # The order payload carries only the opaque address id; the human label
+    # ("Home") comes from get_addresses and must be attached to the order.
+    client, _ = _make_client(
+        addresses=[{"id": "addr1", "addressTag": "Home", "addressLine": "12 MG Rd, City"}],
+        orders_by_address={"addr1": [_raw_order("o1")]},
+        details_by_order_id={"o1": _detail("o1")},
+    )
+
+    orders = fetch_orders(client, _BASE_URL, _ACCESS_TOKEN)
+
+    assert orders[0].address_label == "Home"
+
+
+def test_fetch_orders_falls_back_to_the_address_line_head_when_untagged():
+    client, _ = _make_client(
+        addresses=[{"id": "addr1", "addressLine": "Garima: E-135, Sodala, Jaipur"}],
+        orders_by_address={"addr1": [_raw_order("o1")]},
+        details_by_order_id={"o1": _detail("o1")},
+    )
+
+    orders = fetch_orders(client, _BASE_URL, _ACCESS_TOKEN)
+
+    assert orders[0].address_label == "Garima: E-135"
+
+
 def test_fetch_orders_sets_vendor_name_from_restaurant_name():
     client, _ = _make_client(
         addresses=[{"id": "addr1"}],

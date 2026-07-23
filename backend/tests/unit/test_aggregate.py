@@ -402,9 +402,27 @@ def test_spend_projection_empty_input_is_all_zero():
 
 def test_location_lens_groups_by_address_excludes_null_and_other_platforms():
     orders = [
-        _order(id="o1", platform="swiggy_food", address_id="addr1", grand_total_paise=1000),
-        _order(id="o2", platform="swiggy_food", address_id="addr1", grand_total_paise=500),
-        _order(id="o3", platform="swiggy_food", address_id="addr2", grand_total_paise=2000),
+        _order(
+            id="o1",
+            platform="swiggy_food",
+            address_id="addr1",
+            address_label="Home",
+            grand_total_paise=1000,
+        ),
+        _order(
+            id="o2",
+            platform="swiggy_food",
+            address_id="addr1",
+            address_label="Home",
+            grand_total_paise=500,
+        ),
+        _order(
+            id="o3",
+            platform="swiggy_food",
+            address_id="addr2",
+            address_label="Work",
+            grand_total_paise=2000,
+        ),
         _order(id="o4", platform="swiggy_food", address_id=None, grand_total_paise=300),
         _order(id="o5", platform="swiggy_instamart", address_id="addr3", grand_total_paise=9999),
     ]
@@ -412,8 +430,21 @@ def test_location_lens_groups_by_address_excludes_null_and_other_platforms():
     result = aggregate.location_lens(orders)
 
     assert result == [
-        {"address_id": "addr2", "spend_paise": 2000, "order_count": 1},
-        {"address_id": "addr1", "spend_paise": 1500, "order_count": 2},
+        {"address_id": "addr2", "address_label": "Work", "spend_paise": 2000, "order_count": 1},
+        {"address_id": "addr1", "address_label": "Home", "spend_paise": 1500, "order_count": 2},
+    ]
+
+
+def test_location_lens_label_is_none_when_no_order_carried_one():
+    # Older rows synced before labels existed still group; the label is null.
+    orders = [
+        _order(id="o1", platform="swiggy_food", address_id="addr1", grand_total_paise=1000),
+    ]
+
+    result = aggregate.location_lens(orders)
+
+    assert result == [
+        {"address_id": "addr1", "address_label": None, "spend_paise": 1000, "order_count": 1},
     ]
 
 

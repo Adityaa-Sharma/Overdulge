@@ -46,6 +46,7 @@ class NormalizedOrder:
     raw: dict[str, Any]
     vendor_name: str | None = None
     address_id: str | None = None
+    address_label: str | None = None
     item_total_paise: int | None = None
     fees_paise: int | None = None
     items: list[NormalizedOrderItem] = field(default_factory=list)
@@ -64,6 +65,7 @@ def _order_row(user_id: str, platform: str, order: NormalizedOrder) -> dict[str,
         "vendor_name": order.vendor_name,
         "platform_order_id": order.platform_order_id,
         "address_id": order.address_id,
+        "address_label": order.address_label,
         "status": order.status,
         "is_cancelled": order.is_cancelled,
         "ordered_at": order.ordered_at.isoformat(),

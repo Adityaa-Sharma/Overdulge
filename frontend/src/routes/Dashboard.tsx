@@ -303,7 +303,7 @@ function PopulatedDashboard({ data }: { data: DashboardResponse }) {
             {data.location_lens.map((entry) => (
               <li key={entry.address_id}>
                 <div>
-                  <h3>Address {entry.address_id}</h3>
+                  <h3>{entry.address_label ?? 'Saved address'}</h3>
                   <p className="muted">{entry.order_count} orders</p>
                 </div>
                 <span>{formatPaise(entry.spend_paise)}</span>

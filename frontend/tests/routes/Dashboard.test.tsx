@@ -95,7 +95,9 @@ const POPULATED_RESPONSE = {
     },
     label: 'Projection',
   },
-  location_lens: [{ address_id: 'addr-1', spend_paise: 50000, order_count: 1 }],
+  location_lens: [
+    { address_id: 'addr-1', address_label: 'Home', spend_paise: 50000, order_count: 1 },
+  ],
 }
 
 beforeEach(() => {
@@ -170,7 +172,9 @@ describe('Dashboard', () => {
     await waitFor(() => expect(screen.getAllByText('₹800.00').length).toBeGreaterThan(0))
     expect(screen.getByText('Tasty Bites')).toBeInTheDocument()
     expect(screen.getByText('Milk')).toBeInTheDocument()
-    expect(screen.getByText(/address addr-1/i)).toBeInTheDocument()
+    // Spend-by-location shows the human address label, not the raw id.
+    expect(screen.getByText('Home')).toBeInTheDocument()
+    expect(screen.queryByText(/addr-1/)).not.toBeInTheDocument()
     expect(screen.getAllByText('Swiggy Instamart').length).toBeGreaterThan(0)
   })
 
