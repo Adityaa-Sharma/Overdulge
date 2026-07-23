@@ -25,12 +25,14 @@ _OAUTH_METADATA = {
 
 
 class FakePostgrest:
-    """In-memory PostgREST stand-in that mimics `resolution=merge-duplicates`
-    with an explicit column list: an upsert with `on_conflict` merges only
-    the given keys into the matching existing row (columns not in the
-    payload are left untouched), matching real PostgREST/Postgres behaviour
-    for the partial-column upserts `linked_accounts.py`'s new sync_state/
-    token helpers rely on.
+    """In-memory PostgREST stand-in.
+
+    POST models `resolution=merge-duplicates` (merge the given keys into a
+    matching row, else insert). PATCH models a partial UPDATE of the rows
+    matching the query filters — which is how the sync_state/token helpers now
+    write, after a partial *upsert* was found to fail 23502 against the real DB
+    (it omits the NOT NULL tokens_encrypted column, which Postgres validates
+    before ON CONFLICT can resolve).
     """
 
     def __init__(self) -> None:
@@ -67,6 +69,12 @@ class FakePostgrest:
                 rows.append(new_row)
                 result_rows.append(new_row)
             return httpx.Response(201, json=result_rows)
+        if request.method == "PATCH":
+            values = json.loads(request.content)
+            matched = _filter_rows(rows, request.url.params)
+            for row in matched:
+                row.update(values)
+            return httpx.Response(200, json=matched)
         if request.method == "DELETE":
             matched = _filter_rows(rows, request.url.params)
             rows[:] = [r for r in rows if r not in matched]
@@ -233,6 +241,56 @@ def test_swiggy_account_fans_out_to_food_and_instamart(fake_postgrest):
     assert platforms == {"swiggy_food", "swiggy_instamart"}
 
 
+def test_swiggy_tool_calls_target_the_per_surface_mcp_paths(fake_postgrest):
+    # Regression: both surfaces were sent to the bare host, which serves no
+    # tool server. Food must go to /food, Instamart to /im.
+    account = _seed_linked_account(fake_postgrest, platform="swiggy")
+    tool_paths: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.startswith("/.well-known") or request.url.path.startswith("/oauth"):
+            return _oauth_and_mcp_transport({})[0].handler(request)
+        body = json.loads(request.content)
+        tool_paths[body["params"]["name"]] = request.url.path
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {**_FOOD_RESPONSES, **_INSTAMART_RESPONSES}[body["params"]["name"]],
+            },
+        )
+
+    cron.run_sync_for_account(
+        db.service_role_client(), account, transport=httpx.MockTransport(handler)
+    )
+
+    assert tool_paths["get_addresses"] == "/food"
+    assert tool_paths["get_food_orders"] == "/food"
+    assert tool_paths["get_orders"] == "/im"
+
+
+def test_zepto_tool_calls_target_the_mcp_path(fake_postgrest):
+    account = _seed_linked_account(fake_postgrest, platform="zepto")
+    tool_paths: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.startswith("/.well-known") or request.url.path.startswith("/oauth"):
+            return _oauth_and_mcp_transport({})[0].handler(request)
+        body = json.loads(request.content)
+        tool_paths.append(request.url.path)
+        return httpx.Response(
+            200,
+            json={"jsonrpc": "2.0", "id": 1, "result": _ZEPTO_RESPONSES[body["params"]["name"]]},
+        )
+
+    cron.run_sync_for_account(
+        db.service_role_client(), account, transport=httpx.MockTransport(handler)
+    )
+
+    assert set(tool_paths) == {"/mcp"}
+
+
 def test_zepto_account_syncs_single_sub_platform(fake_postgrest):
     account = _seed_linked_account(fake_postgrest, platform="zepto")
     transport, _ = _oauth_and_mcp_transport(_ZEPTO_RESPONSES)
@@ -328,11 +386,11 @@ def test_state_write_failure_does_not_stop_daily_sync_loop(fake_postgrest):
     real_handler = fake_postgrest.handler
 
     def flaky_handler(request: httpx.Request) -> httpx.Response:
-        if request.method == "POST" and request.url.path.endswith("/linked_accounts"):
-            payload = json.loads(request.content)
-            payload = payload if isinstance(payload, list) else [payload]
-            if any(row.get("user_id") == "user-bad-write" for row in payload):
-                return httpx.Response(500, text="linked_accounts upsert unavailable")
+        # sync_state is written with PATCH (filtered by user_id in the query),
+        # so that is where a state-write failure now surfaces.
+        if request.method == "PATCH" and request.url.path.endswith("/linked_accounts"):
+            if request.url.params.get("user_id") == "eq.user-bad-write":
+                return httpx.Response(500, text="linked_accounts update unavailable")
         return real_handler(request)
 
     fake_postgrest.handler = flaky_handler

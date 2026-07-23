@@ -188,6 +188,20 @@ def _is_expired(expires_at: str | None) -> bool:
     return datetime.fromisoformat(expires_at) <= datetime.now(UTC)
 
 
+# Each MCP surface is served at its own path under the platform host, not at
+# the host root. `mcp_base_url` is the bare host (it is also the OAuth resource
+# origin); the tool endpoints live below it. These match the URLs the platforms
+# publish for their MCP servers (Swiggy Food `/food`, Instamart `/im`, Zepto
+# `/mcp`). Posting a tool call to the bare host reaches no tool server.
+_SWIGGY_FOOD_PATH = "/food"
+_SWIGGY_INSTAMART_PATH = "/im"
+_ZEPTO_PATH = "/mcp"
+
+
+def _mcp_url(base_url: str, path: str) -> str:
+    return f"{base_url.rstrip('/')}{path}"
+
+
 def _fetch_orders_by_sub_platform(
     platform: str, access_token: str, *, transport: httpx.BaseTransport | None
 ) -> list[tuple[str, list[Any]]]:
@@ -200,13 +214,22 @@ def _fetch_orders_by_sub_platform(
             return call_tool(base_url, access_token, tool_name, params, transport=transport)
 
         return [
-            ("swiggy_food", swiggy_food.fetch_orders(mcp_caller, base_url, access_token)),
+            (
+                "swiggy_food",
+                swiggy_food.fetch_orders(
+                    mcp_caller, _mcp_url(base_url, _SWIGGY_FOOD_PATH), access_token
+                ),
+            ),
             (
                 "swiggy_instamart",
-                swiggy_instamart.fetch_orders(mcp_caller, base_url, access_token),
+                swiggy_instamart.fetch_orders(
+                    mcp_caller, _mcp_url(base_url, _SWIGGY_INSTAMART_PATH), access_token
+                ),
             ),
         ]
     if platform == "zepto":
         base_url = zepto_platform.CONFIG.mcp_base_url
-        return [("zepto", zepto.fetch_orders(transport, base_url, access_token))]
+        return [
+            ("zepto", zepto.fetch_orders(transport, _mcp_url(base_url, _ZEPTO_PATH), access_token))
+        ]
     raise ValueError(f"unknown linked_accounts.platform {platform!r}")
