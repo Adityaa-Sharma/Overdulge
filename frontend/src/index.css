@@ -317,3 +317,48 @@ input:focus { border-color: var(--brand-1); background: var(--surface); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
 }
+
+/* --- Screen-reader-only ---------------------------------------------------- */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- Charts (hand-built, no charting library — see FR-3 feature note §5) - */
+.chart-trend__scroll {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.chart-breakdown__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.chart-breakdown__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-h);
+  margin-bottom: 4px;
+}
+.chart-breakdown__track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.chart-breakdown__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--brand-grad);
+}
