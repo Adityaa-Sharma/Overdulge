@@ -30,43 +30,48 @@ create table public.budgets (
     id uuid primary key default gen_random_uuid(),
     user_id uuid not null,
     month date not null,        -- always the first of the month, e.g. 2026-07-01
-    category text,              -- NULL = overall cap; matches order_items.category values verbatim
-    cap_paise int not null check (cap_paise > 0)
+    category text not null,     -- '__overall__' sentinel = overall cap; else matches order_items.category verbatim
+    cap_paise int not null check (cap_paise > 0),
+    constraint budgets_user_month_category_uq unique (user_id, month, category)
 );
-
-create unique index budgets_user_month_category_uq
-    on public.budgets (user_id, month, category)
-    where category is not null;
-
-create unique index budgets_user_month_overall_uq
-    on public.budgets (user_id, month)
-    where category is null;
 ```
 
-Postgres treats `NULL` as distinct from itself in a plain `unique`
-constraint, so one overall cap (`category IS NULL`) per `(user_id, month)`
-needs its own partial unique index alongside the per-category one — a
-single `unique (user_id, month, category)` would silently allow duplicate
-overall caps. RLS is the standard four-policy template
-(`backend/supabase/README.md`, ADR-0002) — `budgets` is a normal user-scoped
-table, no join-back needed (unlike `order_items`).
+The overall cap is stored under the reserved sentinel `'__overall__'`
+rather than true `NULL`. A `NULL`-based design (two partial unique indexes,
+one for `category IS NOT NULL` and one for `category IS NULL`, to work
+around Postgres treating `NULL` as distinct from itself in a plain `unique`
+constraint) cannot be upserted through PostgREST: PostgREST's `on_conflict`
+query param only ever emits a bare `ON CONFLICT (col, ...)` target, and
+Postgres will only infer a *partial* unique index as the arbiter when the
+`ON CONFLICT` target itself repeats the index's `WHERE` predicate — which
+PostgREST's API gives no way to express (postgrest/postgrest#1118). Every
+upsert against a NULL/partial-index design 400s with `42P10`. The sentinel
+keeps a single ordinary unique index, so `on_conflict=user_id,month,category`
+works uniformly for both the per-category and overall-cap branches, while
+still rejecting duplicate overall caps at the DB level.
+`backend/app/core/budgets.py` translates `'__overall__'` <-> `None` at the
+boundary, and rejects `'__overall__'` if passed in as a real category, so
+every other layer (routes, frontend) keeps seeing `category: None` for the
+overall cap and never has to know the sentinel exists. RLS is the standard
+four-policy template (`backend/supabase/README.md`, ADR-0002) —
+`budgets` is a normal user-scoped table, no join-back needed (unlike
+`order_items`).
 
 `category` is freeform text matching whatever `order_items.category` values
 ingest populates (BRD §5 — no fixed enum exists yet); a cap for a category
 that has no matching spend yet is valid and simply shows 0% progress. No
-new validation beyond `cap_paise > 0` — a zero-or-negative cap has no
-sensible progress percentage and is rejected at the DB constraint, backstopped
-by the route (§3).
+new validation beyond `cap_paise > 0` and the sentinel guard above — a
+zero-or-negative cap has no sensible progress percentage and is rejected at
+the DB constraint, backstopped by the route (§3).
 
 ## 3. CRUD + progress routes
 
 `backend/app/api/budgets.py`, all user-JWT-forwarding (ADR-0002 — RLS scopes
 every call, no explicit `user_id` filter in route code):
 
-- `POST /api/v1/budgets` — create-or-replace a cap for `(month, category)`.
-  Upsert on the matching partial-unique index (`on_conflict="user_id,month"`
-  when `category` is absent from the body, `on_conflict="user_id,month,category"`
-  otherwise) — AC-1, AC-6 ("editable").
+- `POST /api/v1/budgets` — create-or-replace a cap for `(month, category)`,
+  via `core/budgets.py`'s `upsert_budget()` (`on_conflict=user_id,month,category`
+  in every case — §2) — AC-1, AC-6 ("editable").
 - `GET /api/v1/budgets?month=2026-07` — every cap for that month plus
   progress, computed by fetching that month's `orders`/`order_items`
   (same two PostgREST calls the dashboard route makes, ADR-0006) and calling
