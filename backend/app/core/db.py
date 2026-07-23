@@ -96,7 +96,8 @@ def _raise_for_status(response: httpx.Response) -> None:
 
 
 def service_role_client(*, transport: httpx.BaseTransport | None = None) -> PostgrestClient:
-    """Bypasses RLS. Import only from `sync/` and `oauth/` — see ADR-0002.
+    """Bypasses RLS. Import only from `sync/`, `oauth/`, and `digest/` —
+    see ADR-0002, extended by ADR-0007 §3.
 
     Every call site using this client must scope its own queries with an
     explicit `user_id` filter; the database will not do it.
