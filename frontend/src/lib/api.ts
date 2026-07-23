@@ -1,6 +1,18 @@
 import { getSession } from './supabase'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
+/**
+ * The deploy secret holds the backend *origin* (e.g. https://…run.app), but the
+ * API is served under the versioned /api/v1 prefix. Concatenating the origin
+ * with paths like "/links" produced 404s on every authenticated call in
+ * production while login (which talks to Supabase directly) kept working.
+ *
+ * Normalising here tolerates every reasonable form of the value — bare origin,
+ * trailing slash, or one already ending in /api/v1 — so the frontend cannot be
+ * broken again by how the secret happens to be written.
+ */
+const API_BASE_URL = `${(import.meta.env.VITE_API_BASE_URL ?? '')
+  .replace(/\/+$/, '')
+  .replace(/\/api\/v1$/, '')}/api/v1`
 
 export class ApiError extends Error {
   readonly status: number
@@ -27,7 +39,9 @@ export async function apiFetch(path: string, opts: RequestInit = {}): Promise<Re
   const response = await fetch(`${API_BASE_URL}${path}`, { ...opts, headers })
 
   if (response.status === 401) {
-    window.location.assign('/login')
+    // The app is served from a sub-path on Pages (/Overdulge/), so a bare
+    // "/login" lands on a 404 instead of the sign-in screen.
+    window.location.assign(`${import.meta.env.BASE_URL}login`)
     throw new ApiError('Unauthorized', 401)
   }
 
