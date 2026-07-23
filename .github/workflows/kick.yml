@@ -129,6 +129,38 @@ jobs:
               || echo "  -> merge failed for #$n (branch protection or race)"
           done
 
+      - name: Unblock issues whose blockers are all resolved
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          # SA is supposed to swap blocked -> ready-for-dev when it merges a
+          # blocker, but merging is now deterministic (done here in kick), so
+          # that step was orphaned: dependents stayed blocked forever even after
+          # their blocker merged. Scan every blocked issue; if ALL of its
+          # `blocked-by:#N` references are closed, unblock it.
+          for n in $(gh issue list --repo "$REPO" --label blocked --state open --limit 100 \
+                       --json number --jq '.[].number'); do
+            body=$(gh api "repos/$REPO/issues/$n" --jq '.body // ""')
+            deps=$(printf '%s' "$body" | grep -oiE 'blocked-by:#?[0-9]+' | grep -oE '[0-9]+' | sort -u)
+            if [ -z "$deps" ]; then
+              echo "#$n: labelled blocked but no blocked-by ref — leaving for a human"
+              continue
+            fi
+            all_closed=1
+            for d in $deps; do
+              st=$(gh api "repos/$REPO/issues/$d" --jq .state 2>/dev/null || echo open)
+              [ "$st" != "closed" ] && all_closed=0
+            done
+            if [ "$all_closed" = "1" ]; then
+              gh issue edit "$n" --repo "$REPO" --remove-label blocked --add-label ready-for-dev >/dev/null 2>&1 \
+                && echo "#$n: all blockers ($(echo $deps | tr '\n' ' ')) closed -> unblocked to ready-for-dev"
+            else
+              echo "#$n: still blocked by open $(echo $deps | tr '\n' ' ')"
+            fi
+          done
+
       - name: Re-fire one stalled needs-architecture issue
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
