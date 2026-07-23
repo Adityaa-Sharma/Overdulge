@@ -3,18 +3,19 @@ from datetime import UTC, datetime
 from app.mcp.adapters import swiggy_instamart
 
 
-class _FakeClient:
-    """Stands in for `app.mcp.client`: records every `call_tool` invocation
-    so tests can assert on the exact params sent, per issue #50's AC-4.
+def _make_client(result: dict):
+    """A plain callable matching `mcp/client.py::call_tool`'s signature —
+    the same shape `swiggy_instamart.fetch_orders` receives from real
+    orchestration, so tests can assert on the exact params sent (issue #50's
+    AC-4) without inventing an interface no real caller has.
     """
+    calls: list[tuple[str, str, str, dict]] = []
 
-    def __init__(self, result: dict) -> None:
-        self._result = result
-        self.calls: list[tuple[str, str, str, dict]] = []
+    def client(base_url: str, access_token: str, tool_name: str, params: dict) -> dict:
+        calls.append((base_url, access_token, tool_name, params))
+        return result
 
-    def call_tool(self, base_url: str, access_token: str, tool_name: str, params: dict) -> dict:
-        self.calls.append((base_url, access_token, tool_name, params))
-        return self._result
+    return client, calls
 
 
 def _order(**overrides) -> dict:
@@ -30,12 +31,12 @@ def _order(**overrides) -> dict:
 
 
 def test_fetch_orders_sends_order_type_dash_and_never_instamart():
-    client = _FakeClient({"orders": []})
+    client, calls = _make_client({"orders": []})
 
     swiggy_instamart.fetch_orders(client, "https://mcp.swiggy.com/im", "token")
 
-    assert len(client.calls) == 1
-    base_url, access_token, tool_name, params = client.calls[0]
+    assert len(calls) == 1
+    base_url, access_token, tool_name, params = calls[0]
     assert base_url == "https://mcp.swiggy.com/im"
     assert access_token == "token"
     assert tool_name == "get_orders"
@@ -44,7 +45,7 @@ def test_fetch_orders_sends_order_type_dash_and_never_instamart():
 
 
 def test_fetch_orders_converts_plain_rupees_to_paise():
-    client = _FakeClient({"orders": [_order(grandTotal=273, itemTotal=250, deliveryFee=23)]})
+    client, _ = _make_client({"orders": [_order(grandTotal=273, itemTotal=250, deliveryFee=23)]})
 
     orders = swiggy_instamart.fetch_orders(client, "https://mcp.swiggy.com/im", "token")
 
@@ -56,7 +57,7 @@ def test_fetch_orders_converts_plain_rupees_to_paise():
 
 
 def test_fetch_orders_converts_fractional_rupees_to_paise():
-    client = _FakeClient({"orders": [_order(grandTotal=99.5)]})
+    client, _ = _make_client({"orders": [_order(grandTotal=99.5)]})
 
     orders = swiggy_instamart.fetch_orders(client, "https://mcp.swiggy.com/im", "token")
 
@@ -64,7 +65,7 @@ def test_fetch_orders_converts_fractional_rupees_to_paise():
 
 
 def test_fetch_orders_grand_total_paise_is_never_recomputed_from_items():
-    client = _FakeClient(
+    client, _ = _make_client(
         {
             "orders": [
                 _order(
@@ -86,7 +87,7 @@ def test_fetch_orders_grand_total_paise_is_never_recomputed_from_items():
 
 
 def test_fetch_orders_parses_iso8601_utc_timestamp_directly():
-    client = _FakeClient({"orders": [_order(orderTime="2026-07-20T12:00:00Z")]})
+    client, _ = _make_client({"orders": [_order(orderTime="2026-07-20T12:00:00Z")]})
 
     orders = swiggy_instamart.fetch_orders(client, "https://mcp.swiggy.com/im", "token")
 
@@ -94,7 +95,7 @@ def test_fetch_orders_parses_iso8601_utc_timestamp_directly():
 
 
 def test_fetch_orders_address_id_is_always_none():
-    client = _FakeClient({"orders": [_order()]})
+    client, _ = _make_client({"orders": [_order()]})
 
     orders = swiggy_instamart.fetch_orders(client, "https://mcp.swiggy.com/im", "token")
 
@@ -102,7 +103,7 @@ def test_fetch_orders_address_id_is_always_none():
 
 
 def test_fetch_orders_marks_cancelled_status():
-    client = _FakeClient(
+    client, _ = _make_client(
         {
             "orders": [
                 _order(orderId="im-2", status="CANCELLED"),
@@ -118,7 +119,7 @@ def test_fetch_orders_marks_cancelled_status():
 
 
 def test_fetch_orders_normalizes_items():
-    client = _FakeClient(
+    client, _ = _make_client(
         {
             "orders": [
                 _order(
@@ -151,7 +152,7 @@ def test_fetch_orders_normalizes_items():
 
 
 def test_fetch_orders_returns_empty_list_when_no_orders():
-    client = _FakeClient({"orders": []})
+    client, _ = _make_client({"orders": []})
 
     orders = swiggy_instamart.fetch_orders(client, "https://mcp.swiggy.com/im", "token")
 

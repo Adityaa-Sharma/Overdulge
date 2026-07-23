@@ -13,23 +13,25 @@ converted from `grandTotal` verbatim — no arithmetic on it, or on any other
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
 from app.sync.normalize import NormalizedOrder, NormalizedOrderItem
+
+# Matches `mcp/client.py::call_tool`'s signature exactly, so orchestration
+# can pass that function directly and tests can pass a fake with the same
+# shape without touching HTTP transport at all.
+McpCaller = Callable[[str, str, str, dict[str, Any]], dict[str, Any]]
 
 _TOOL_NAME = "get_orders"
 _ORDER_TYPE = "DASH"
 _CANCELLED_STATUSES = {"CANCELLED"}
 
 
-def fetch_orders(client: Any, base_url: str, access_token: str) -> list[NormalizedOrder]:
-    """Fetches and normalizes every Instamart order visible to this account.
-
-    `client` is `app.mcp.client` (or anything exposing the same `call_tool`
-    signature) — injected so tests can assert the exact params sent.
-    """
-    result = client.call_tool(base_url, access_token, _TOOL_NAME, {"orderType": _ORDER_TYPE})
+def fetch_orders(client: McpCaller, base_url: str, access_token: str) -> list[NormalizedOrder]:
+    """Fetches and normalizes every Instamart order visible to this account."""
+    result = client(base_url, access_token, _TOOL_NAME, {"orderType": _ORDER_TYPE})
     return [_normalize_order(order) for order in result.get("orders", [])]
 
 
