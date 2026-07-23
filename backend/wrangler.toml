@@ -1,5 +1,5 @@
 name = "overdulge-backend"
-main = "app/main.py"
+main = "worker.py"
 compatibility_date = "2026-07-22"
 compatibility_flags = ["python_workers"]
 

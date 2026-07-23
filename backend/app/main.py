@@ -12,9 +12,3 @@ app = FastAPI(title="Overdulge")
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(me.router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
 app.include_router(links.router, prefix="/api/v1")
-
-
-async def on_fetch(request, env):
-    import asgi
-
-    return await asgi.fetch(app, request, env)

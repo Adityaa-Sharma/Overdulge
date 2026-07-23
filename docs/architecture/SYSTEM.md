@@ -27,8 +27,12 @@ it — one system doc, updated in place, ADRs for point decisions.
 
 ```
 backend/
+  worker.py         Cloudflare Worker fetch entrypoint (must stay at this
+                    top level — Pyodide's import root is the directory of
+                    wrangler.toml's `main`, so it has to sit beside `app/`
+                    for `from app...` imports to resolve)
   app/
-    main.py         FastAPI app + Worker fetch entrypoint
+    main.py         FastAPI app + router wiring
     api/             route modules, one per feature area:
                       auth.py, links.py, sync.py, dashboard.py, query.py,
                       budgets.py, calories.py, recommendations.py
