@@ -301,3 +301,60 @@ def location_lens(orders: list[Row], *, limit: int = 20) -> list[dict[str, Any]]
         field_name="address_id",
         limit=limit,
     )
+
+
+def _eligible_item_kcal_by_order(order_items: list[Row]) -> dict[Any, int]:
+    kcal_by_order: dict[Any, int] = {}
+    for item in order_items:
+        estimate = item.get("calorie_estimate")
+        if estimate is None:
+            continue
+        order_id = item.get("order_id")
+        kcal_by_order[order_id] = kcal_by_order.get(order_id, 0) + estimate
+    return kcal_by_order
+
+
+def calorie_totals(orders: list[Row], order_items: list[Row], *, now: datetime) -> dict[str, int]:
+    week_start = _week_start(now)
+    month_start = _month_start(now)
+    kcal_by_order = _eligible_item_kcal_by_order(order_items)
+
+    this_week = 0
+    this_month = 0
+    for order in orders:
+        kcal = kcal_by_order.get(order["id"])
+        if kcal is None:
+            continue
+        ordered_at = _parse_timestamp(order["ordered_at"])
+        if ordered_at >= week_start:
+            this_week += kcal
+        if ordered_at >= month_start:
+            this_month += kcal
+
+    return {"this_week_estimate_kcal": this_week, "this_month_estimate_kcal": this_month}
+
+
+def calorie_trend(
+    orders: list[Row],
+    order_items: list[Row],
+    *,
+    now: datetime,
+    lookback: int = 12,
+) -> list[dict[str, Any]]:
+    current_period = _week_start(now)
+    periods = [_shift_weeks_back(current_period, n) for n in range(lookback - 1, -1, -1)]
+    buckets = {period.date().isoformat(): 0 for period in periods}
+    kcal_by_order = _eligible_item_kcal_by_order(order_items)
+
+    for order in orders:
+        kcal = kcal_by_order.get(order["id"])
+        if kcal is None:
+            continue
+        period_key = _week_start(_parse_timestamp(order["ordered_at"])).date().isoformat()
+        if period_key in buckets:
+            buckets[period_key] += kcal
+
+    return [
+        {"period_start": key, "estimate_kcal": buckets[key]}
+        for key in (period.date().isoformat() for period in periods)
+    ]
