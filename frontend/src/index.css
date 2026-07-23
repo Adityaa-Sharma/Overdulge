@@ -74,13 +74,16 @@
     --gold-deep: #f7b646;
     --gold-swipe: #6a4d12;
     --gold-soft: rgba(247, 182, 70, 0.16);
-    --paper: #17121c;
-    --paper-2: #1e1727;
-    --card: #221a2b;
-    --ink: #f4ece1;
-    --ink-2: #b0a6b6;
-    --line: #332a3d;
-    --line-2: #443a50;
+    /* Warm darks: every neutral keeps red above blue. An earlier aubergine
+       palette (#17121c / #221a2b) was blue-dominant and read as violet in dark
+       mode — the exact cast this design system exists to get away from. */
+    --paper: #15110d;
+    --paper-2: #1d1712;
+    --card: #211b15;
+    --ink: #f6ede1;
+    --ink-2: #b5a794;
+    --line: #33291f;
+    --line-2: #46392b;
     --good: #3ad08f;
     --good-soft: #133026;
     --bad: #ff8a8e;
