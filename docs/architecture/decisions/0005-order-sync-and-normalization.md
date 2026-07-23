@@ -78,8 +78,12 @@ SyncResult`, the single implementation of "sync one linked account": resolve
 a valid access token (delegating to `oauth/engine.py`'s refresh — this
 function is the one place in FR-2 that imports from `oauth/`), call the
 relevant adapter(s) (both Food and Instamart for a `swiggy` row), normalize,
-upsert, and update `linked_accounts.last_sync_at` +
-`sync_state.orders_captured_last_run`.
+upsert, and update state. `linked_accounts.last_sync_at` (the column, BRD
+§5) is the single source of truth for "when did this account last
+*successfully* finish syncing" — it is written only on the success path, and
+nowhere else duplicates that value under a different name. Everything else
+about the in-progress/lock state lives in the `sync_state` jsonb column;
+see §6 for its exact shape.
 
 - The **Cron Trigger entrypoint** (`wrangler.toml` `[triggers] crons`,
   daily) loops `run_sync_for_account` over every `linked_accounts` row
@@ -88,10 +92,15 @@ upsert, and update `linked_accounts.last_sync_at` +
   user-JWT-forwarding) calls it for the one row belonging to the
   authenticated user, guarded by an in-flight lock: before running, it
   checks `sync_state.status != "syncing"`; if already syncing, returns 409
-  rather than starting a second concurrent run. `sync_state.status` is set
-  to `"syncing"` before the call and `"idle"` (with `last_error` cleared or
-  set) in a `finally`, so a crashed sync doesn't wedge the lock forever —
-  the route also treats a `"syncing"` status older than a generous timeout
+  rather than starting a second concurrent run. Immediately before calling
+  `run_sync_for_account`, the route sets `sync_state.status = "syncing"` and
+  `sync_state.syncing_since` to the current UTC timestamp — this is the
+  field the staleness check reads. In a `finally`, it sets `sync_state.status
+  = "idle"`, clears `syncing_since`, and sets `last_error` (or clears it on
+  success), and only on success does it also write `linked_accounts.last_sync_at`.
+  A crashed sync therefore leaves `status: "syncing"` with a stale
+  `syncing_since` rather than wedging the lock forever: the route treats a
+  `"syncing"` status whose `syncing_since` is older than a generous timeout
   (e.g. 10 minutes, longer than any plausible real sync) as stale and
   proceeds anyway.
 
@@ -115,25 +124,47 @@ sync status "per platform" using the three-value `orders.platform` sense
 (`swiggy_food`/`swiggy_instamart`/`zepto`), because Food and Instamart are
 counted separately. `run_sync_for_account` therefore writes
 `orders_captured_last_run` as an object keyed by `orders.platform`, not a
-bare int, so the `swiggy` row can report both sub-platforms from one lock:
+bare int, so the `swiggy` row can report both sub-platforms from one lock.
+
+`sync_state` carries only the fields that are *not* already a column:
+`status` (`"idle" | "syncing"`), `last_error` (string or `null`),
+`syncing_since` (the §4 lock-staleness anchor: an ISO-8601 UTC timestamp set
+the instant `status` flips to `"syncing"`, cleared back to `null` when it
+flips back to `"idle"` — never used for anything except the staleness
+check), and `orders_captured_last_run`. It never repeats
+`linked_accounts.last_sync_at` under another key — that column is read
+directly wherever "last successful sync" is needed.
 
 ```json
+// idle, after a successful run
 {
   "status": "idle",
   "last_error": null,
-  "last_run_at": "2026-07-23T03:00:00Z",
+  "syncing_since": null,
   "orders_captured_last_run": {"swiggy_food": 4, "swiggy_instamart": 1}
 }
 ```
 
-Zepto's row uses the same shape with a single key (`{"zepto": N}`) rather
-than a bare int, so both the status endpoint and its tests handle one shape,
-not two. `GET /api/v1/sync/status` (user-JWT-forwarding) flattens both
-`linked_accounts` rows into one array of exactly the three `orders.platform`
-values (omitting ones with no linked account at all — a platform the user
-never linked has no row and is left out, not shown as an empty/error
-entry): `[{platform, last_sync_at, orders_captured_last_run, warning}]`,
-where `warning` is the static Instamart string (§5) for
+```json
+// mid-run, lock held
+{
+  "status": "syncing",
+  "last_error": null,
+  "syncing_since": "2026-07-23T03:00:00Z",
+  "orders_captured_last_run": {"swiggy_food": 4, "swiggy_instamart": 1}
+}
+```
+
+Zepto's row uses the same shape with a single-key
+`orders_captured_last_run` (`{"zepto": N}`) rather than a bare int, so both
+the status endpoint and its tests handle one shape, not two. `GET
+/api/v1/sync/status` (user-JWT-forwarding) flattens both `linked_accounts`
+rows into one array of exactly the three `orders.platform` values (omitting
+ones with no linked account at all — a platform the user never linked has
+no row and is left out, not shown as an empty/error entry):
+`[{platform, last_sync_at, orders_captured_last_run, warning}]`, where
+`last_sync_at` is read straight from the `linked_accounts` column (`null`
+if never synced), and `warning` is the static Instamart string (§5) for
 `swiggy_instamart` and `null` otherwise. `POST /api/v1/sync/{platform}`
 takes an `orders.platform` value too (`swiggy_food` and `swiggy_instamart`
 both resolve to the underlying `swiggy` `linked_accounts` row and, per §4,
