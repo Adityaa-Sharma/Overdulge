@@ -1,6 +1,6 @@
 from fastapi import Depends, FastAPI
 
-from app.api import health, links, me
+from app.api import dashboard, health, links, me
 from app.core.auth import get_current_user
 
 app = FastAPI(title="Overdulge")
@@ -12,3 +12,4 @@ app = FastAPI(title="Overdulge")
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(me.router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
 app.include_router(links.router, prefix="/api/v1")
+app.include_router(dashboard.router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
