@@ -278,6 +278,26 @@ def test_callback_with_failed_token_exchange_returns_false_and_clears_pending_ro
     assert fake_postgrest.tables["oauth_pending_links"] == []
 
 
+def test_callback_with_metadata_discovery_failure_returns_false_and_clears_pending_row(
+    fake_postgrest,
+):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/.well-known/oauth-authorization-server/oauth":
+            return httpx.Response(503, text="service unavailable")
+        raise AssertionError(request.url.path)
+
+    registration_transport = httpx.MockTransport(FakeAuthServer().handler)
+    started = engine.start_link(TEST_CONFIG, user_id="user-1", transport=registration_transport)
+
+    success = engine.handle_callback(
+        TEST_CONFIG, code="auth-code", state=started.state, transport=httpx.MockTransport(handler)
+    )
+
+    assert success is False
+    assert fake_postgrest.tables["linked_accounts"] == []
+    assert fake_postgrest.tables["oauth_pending_links"] == []
+
+
 def test_refresh_tokens_rotates_access_and_refresh_token(fake_postgrest, fake_auth_server):
     transport = httpx.MockTransport(fake_auth_server.handler)
 

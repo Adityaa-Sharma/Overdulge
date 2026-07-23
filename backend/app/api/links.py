@@ -38,7 +38,14 @@ async def start_link(platform: str, user: AuthedUser = Depends(get_current_user)
 
 
 @router.get("/links/{platform}/callback")
-async def link_callback(platform: str, code: str, state: str) -> RedirectResponse:
+async def link_callback(
+    platform: str, state: str, code: str | None = None, error: str | None = None
+) -> RedirectResponse:
+    """`code`/`error` are mutually exclusive per RFC 6749 §4.1.2/§4.1.2.1: the
+    auth server redirects here with `code` on success, or `error` (no `code`)
+    when the user declines/cancels or the server itself fails. Either way the
+    browser must land on a redirect, never a raw 4xx/5xx.
+    """
     config = _platform_config(platform)
     settings = get_settings()
     if not settings.frontend_settings_url:
@@ -47,7 +54,11 @@ async def link_callback(platform: str, code: str, state: str) -> RedirectRespons
             detail="FRONTEND_SETTINGS_URL is not configured",
         )
 
-    linked_ok = engine.handle_callback(config, code=code, state=state)
+    linked_ok = (
+        code is not None
+        and error is None
+        and engine.handle_callback(config, code=code, state=state)
+    )
     query = urlencode({"linked": platform, "status": "ok" if linked_ok else "error"})
     return RedirectResponse(
         url=f"{settings.frontend_settings_url}?{query}",

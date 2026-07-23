@@ -132,11 +132,12 @@ def handle_callback(
             linked_accounts.delete_pending_link(db_client, user_id=user_id, platform=config.name)
             return False
 
-        with httpx.Client(transport=transport) as http:
-            metadata = _fetch_metadata(http, config)
-            client_id, client_secret = _get_or_register_client(db_client, http, config, metadata)
-
-            try:
+        try:
+            with httpx.Client(transport=transport) as http:
+                metadata = _fetch_metadata(http, config)
+                client_id, client_secret = _get_or_register_client(
+                    db_client, http, config, metadata
+                )
                 token_set = _exchange_code(
                     http,
                     config,
@@ -146,11 +147,9 @@ def handle_callback(
                     code,
                     pending["code_verifier"],
                 )
-            except OAuthError:
-                linked_accounts.delete_pending_link(
-                    db_client, user_id=user_id, platform=config.name
-                )
-                return False
+        except OAuthError:
+            linked_accounts.delete_pending_link(db_client, user_id=user_id, platform=config.name)
+            return False
 
         linked_accounts.upsert_linked_account(
             db_client,

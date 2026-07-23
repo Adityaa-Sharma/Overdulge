@@ -132,6 +132,27 @@ def test_callback_redirects_with_status_error_on_failure(
     )
 
 
+def test_callback_with_authorization_server_error_redirects_with_status_error_and_skips_engine(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _fail_if_called(config, *, code, state):
+        raise AssertionError("engine.handle_callback must not be called without a code")
+
+    monkeypatch.setattr(links_module.engine, "handle_callback", _fail_if_called)
+
+    response = client.get(
+        "/api/v1/links/swiggy/callback",
+        params={"state": "s1", "error": "access_denied"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert (
+        response.headers["location"]
+        == "https://overdulge.example/settings?linked=swiggy&status=error"
+    )
+
+
 def test_callback_rejects_unknown_platform() -> None:
     response = client.get("/api/v1/links/doordash/callback", params={"code": "c1", "state": "s1"})
 
