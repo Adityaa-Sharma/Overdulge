@@ -67,18 +67,17 @@ def run_sync_for_account(
     sync_state = linked_account.get("sync_state") or {}
     now = datetime.now(UTC).isoformat()
 
-    linked_accounts.set_sync_status(
-        client,
-        user_id=user_id,
-        platform=platform,
-        sync_state=sync_state,
-        status="syncing",
-        syncing_since=now,
-    )
-
     orders_captured: dict[str, int] = {}
     error: str | None = None
     try:
+        linked_accounts.set_sync_status(
+            client,
+            user_id=user_id,
+            platform=platform,
+            sync_state=sync_state,
+            status="syncing",
+            syncing_since=now,
+        )
         access_token = _resolve_access_token(
             client,
             user_id=user_id,
@@ -91,6 +90,15 @@ def run_sync_for_account(
         ):
             result = upsert_orders(client, user_id=user_id, platform=sub_platform, orders=orders)
             orders_captured[sub_platform] = result.orders_upserted
+
+        linked_accounts.record_sync_result(
+            client,
+            user_id=user_id,
+            platform=platform,
+            sync_state=sync_state,
+            orders_captured=orders_captured,
+            synced_at=now,
+        )
     except Exception as exc:  # noqa: BLE001 -- one bad account must not stop the loop
         error = str(exc)
         log_event(
@@ -100,26 +108,24 @@ def run_sync_for_account(
             platform=platform,
             error_type=type(exc).__name__,
         )
-
-    if error is None:
-        linked_accounts.record_sync_result(
-            client,
-            user_id=user_id,
-            platform=platform,
-            sync_state=sync_state,
-            orders_captured=orders_captured,
-            synced_at=now,
-        )
-    else:
-        linked_accounts.set_sync_status(
-            client,
-            user_id=user_id,
-            platform=platform,
-            sync_state=sync_state,
-            status="idle",
-            syncing_since=None,
-            last_error=error,
-        )
+        try:
+            linked_accounts.set_sync_status(
+                client,
+                user_id=user_id,
+                platform=platform,
+                sync_state=sync_state,
+                status="idle",
+                syncing_since=None,
+                last_error=error,
+            )
+        except Exception as write_exc:  # noqa: BLE001 -- see comment above
+            log_event(
+                "error",
+                "failed to record sync failure state",
+                user_id=user_id,
+                platform=platform,
+                error_type=type(write_exc).__name__,
+            )
 
     return SyncResult(
         user_id=user_id,

@@ -318,6 +318,33 @@ def test_expired_token_triggers_refresh_exactly_once_before_adapter_call(fake_po
     assert refreshed.refresh_token == "rt-refreshed"
 
 
+def test_state_write_failure_does_not_stop_daily_sync_loop(fake_postgrest):
+    _seed_linked_account(fake_postgrest, user_id="user-bad-write", platform="zepto")
+    _seed_linked_account(fake_postgrest, user_id="user-good", platform="zepto")
+
+    real_handler = fake_postgrest.handler
+
+    def flaky_handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path.endswith("/linked_accounts"):
+            payload = json.loads(request.content)
+            payload = payload if isinstance(payload, list) else [payload]
+            if any(row.get("user_id") == "user-bad-write" for row in payload):
+                return httpx.Response(500, text="linked_accounts upsert unavailable")
+        return real_handler(request)
+
+    fake_postgrest.handler = flaky_handler
+    transport, _ = _oauth_and_mcp_transport(_ZEPTO_RESPONSES)
+
+    results = cron.run_daily_sync(transport=transport)
+
+    assert len(results) == 2
+    by_user = {result.user_id: result for result in results}
+    assert by_user["user-bad-write"].success is False
+    assert by_user["user-bad-write"].error is not None
+    assert by_user["user-good"].success is True
+    assert by_user["user-good"].orders_captured == {"zepto": 1}
+
+
 def test_failing_account_does_not_stop_daily_sync_loop(fake_postgrest):
     _seed_linked_account(
         fake_postgrest, user_id="user-bad", platform="zepto", access_token="bad-token"
