@@ -23,7 +23,8 @@ describe('Protected dashboard shell', () => {
     renderProtected()
 
     expect(screen.getByRole('heading', { name: /dashboard/i })).toBeInTheDocument()
-    expect(screen.getByText(/overdulge/i)).toBeInTheDocument()
+    // Exact match targets the brand wordmark, not the sentence in the empty state.
+    expect(screen.getByText('Overdulge')).toBeInTheDocument()
   })
 
   it('prompts the user to link an account when there is no data', () => {
