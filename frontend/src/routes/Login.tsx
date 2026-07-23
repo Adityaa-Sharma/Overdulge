@@ -1,69 +1,25 @@
-import { useState, type FormEvent } from 'react'
+import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useSession } from '../lib/session'
-import {
-  isEmailRateLimitError,
-  requestEmailOtp,
-  signInWithGoogle,
-  verifyEmailOtp,
-} from '../lib/supabase'
-
-type Stage = 'request' | 'verify'
-type Pending = 'otp-request' | 'otp-verify' | 'google' | null
+import { signInWithGoogle } from '../lib/supabase'
 
 export default function Login() {
   const { status } = useSession()
-  const [stage, setStage] = useState<Stage>('request')
-  const [email, setEmail] = useState('')
-  const [otp, setOtp] = useState('')
-  const [pending, setPending] = useState<Pending>(null)
+  const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   if (status === 'authenticated') {
     return <Navigate to="/" replace />
   }
 
-  async function handleRequestOtp(event: FormEvent) {
-    event.preventDefault()
-    setError(null)
-    setPending('otp-request')
-    try {
-      await requestEmailOtp(email)
-      setStage('verify')
-    } catch (cause) {
-      // Blaming the address for a spent send quota sends the user off fixing
-      // an email that was never wrong.
-      setError(
-        isEmailRateLimitError(cause)
-          ? 'Too many codes requested just now. Wait a few minutes, or continue with Google.'
-          : 'Could not send the code. Check the email address and try again.',
-      )
-    } finally {
-      setPending(null)
-    }
-  }
-
-  async function handleVerifyOtp(event: FormEvent) {
-    event.preventDefault()
-    setError(null)
-    setPending('otp-verify')
-    try {
-      await verifyEmailOtp(email, otp)
-    } catch {
-      setError('That code is incorrect or has expired. Request a new one.')
-    } finally {
-      setPending(null)
-    }
-  }
-
   async function handleGoogleSignIn() {
     setError(null)
-    setPending('google')
+    setPending(true)
     try {
       await signInWithGoogle()
     } catch {
       setError('Could not start Google sign-in. Please try again.')
-      setPending(null)
+      setPending(false)
     }
   }
 
@@ -83,60 +39,15 @@ export default function Login() {
           </p>
         </div>
 
-      {error && <p role="alert">{error}</p>}
+        {error && <p role="alert">{error}</p>}
 
-      {stage === 'request' && (
-        <form onSubmit={handleRequestOtp}>
-          <label htmlFor="email">Email address</label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            disabled={pending === 'otp-request'}
-          />
-          <button className="btn-primary btn-block" type="submit" disabled={pending === 'otp-request'}>
-            {pending === 'otp-request' ? 'Sending code…' : 'Send code'}
-          </button>
-        </form>
-      )}
-
-      {stage === 'verify' && (
-        <form onSubmit={handleVerifyOtp}>
-          <p className="muted">
-            We emailed a code to {email}.{' '}
-            <button className="btn-ghost" type="button" onClick={() => setStage('request')}>
-              Use a different email
-            </button>
-          </p>
-          {/* Deliberately not "6-digit code": the length is a Supabase project
-              setting (this project issues 8), so naming a number here puts the
-              copy one dashboard toggle away from being wrong. */}
-          <label htmlFor="otp">Code from your email</label>
-          <input
-            id="otp"
-            name="otp"
-            type="text"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            required
-            value={otp}
-            onChange={(event) => setOtp(event.target.value)}
-            disabled={pending === 'otp-verify'}
-          />
-          <button className="btn-primary btn-block" type="submit" disabled={pending === 'otp-verify'}>
-            {pending === 'otp-verify' ? 'Verifying…' : 'Verify code'}
-          </button>
-        </form>
-      )}
-
-        <div className="divider">or</div>
-
-        <button className="btn-block" type="button" onClick={handleGoogleSignIn} disabled={pending === 'google'}>
-          {pending === 'google' ? 'Redirecting…' : 'Continue with Google'}
+        <button
+          className="btn-primary btn-block"
+          type="button"
+          onClick={handleGoogleSignIn}
+          disabled={pending}
+        >
+          {pending ? 'Redirecting…' : 'Continue with Google'}
         </button>
 
         <p className="auth__trust">

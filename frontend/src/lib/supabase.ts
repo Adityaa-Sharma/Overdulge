@@ -34,30 +34,11 @@ export function onAuthStateChange(callback: (session: Session | null) => void) {
   return () => subscription.unsubscribe()
 }
 
-/** Requests a one-time passcode be emailed to `email` (signs up the user if they're new). */
-export async function requestEmailOtp(email: string): Promise<void> {
-  const { error } = await getSupabaseClient().auth.signInWithOtp({ email })
-  if (error) throw error
-}
-
-/**
- * True when Supabase refused to send because the project's email quota is
- * spent, not because anything about the request was wrong.
- *
- * This is worth singling out: the address the user typed is fine, so telling
- * them to check it sends them off correcting something that was never broken.
- */
-export function isEmailRateLimitError(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false
-  const { code, status } = error as { code?: unknown; status?: unknown }
-  return code === 'over_email_send_rate_limit' || status === 429
-}
-
-/** Verifies the passcode sent by {@link requestEmailOtp}, establishing a session on success. */
-export async function verifyEmailOtp(email: string, token: string): Promise<void> {
-  const { error } = await getSupabaseClient().auth.verifyOtp({ email, token, type: 'email' })
-  if (error) throw error
-}
+// Email OTP sign-in was removed: this Supabase project has no custom SMTP, so
+// its built-in mailer rate-limits every code request (429
+// over_email_send_rate_limit) and the flow could never reliably deliver a
+// code. Google is the only sign-in method. Re-add email here (and a UI for it)
+// once an SMTP provider is configured.
 
 export async function signInWithGoogle(): Promise<void> {
   const { error } = await getSupabaseClient().auth.signInWithOAuth({
