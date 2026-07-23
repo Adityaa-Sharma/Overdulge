@@ -503,3 +503,118 @@ def test_budget_progress_multiple_caps_each_get_independent_rows():
 
 def test_budget_progress_empty_budgets_returns_empty_list():
     assert aggregate.budget_progress(_BUDGET_ORDERS, _BUDGET_ITEMS, [], now=NOW) == []
+
+
+# --- calorie_totals -----------------------------------------------------------------
+
+_CALORIE_ORDERS = [
+    _order(id="o1", ordered_at="2026-07-21T12:00:00Z"),  # this week
+    _order(id="o2", ordered_at="2026-07-22T09:00:00Z"),  # this week
+    _order(id="o3", ordered_at="2026-07-05T00:00:00Z"),  # this month, not this week
+    _order(id="o4", ordered_at="2026-06-15T00:00:00Z"),  # neither
+]
+
+
+def test_calorie_totals_sums_present_estimates_within_week_and_month():
+    order_items = [
+        _item(order_id="o1", calorie_estimate=300),
+        _item(order_id="o2", calorie_estimate=150),
+        _item(order_id="o3", calorie_estimate=400),
+        _item(order_id="o4", calorie_estimate=999),
+    ]
+
+    result = aggregate.calorie_totals(_CALORIE_ORDERS, order_items, now=NOW)
+
+    assert result == {"this_week_estimate_kcal": 450, "this_month_estimate_kcal": 850}
+
+
+def test_calorie_totals_skips_items_with_none_estimate():
+    order_items = [
+        _item(order_id="o1", calorie_estimate=300),
+        _item(order_id="o1", calorie_estimate=None),
+        _item(order_id="o2", calorie_estimate=None),
+    ]
+
+    result = aggregate.calorie_totals(_CALORIE_ORDERS, order_items, now=NOW)
+
+    assert result == {"this_week_estimate_kcal": 300, "this_month_estimate_kcal": 300}
+
+
+def test_calorie_totals_skips_items_missing_estimate_key_entirely():
+    order_items = [
+        _item(order_id="o1", calorie_estimate=300),
+        _item(order_id="o1"),  # no calorie_estimate key at all, e.g. not yet estimated
+    ]
+
+    result = aggregate.calorie_totals(_CALORIE_ORDERS, order_items, now=NOW)
+
+    assert result == {"this_week_estimate_kcal": 300, "this_month_estimate_kcal": 300}
+
+
+def test_calorie_totals_sums_multiple_items_per_order():
+    order_items = [
+        _item(order_id="o1", calorie_estimate=300),
+        _item(order_id="o1", calorie_estimate=200),
+    ]
+
+    result = aggregate.calorie_totals(_CALORIE_ORDERS, order_items, now=NOW)
+
+    assert result == {"this_week_estimate_kcal": 500, "this_month_estimate_kcal": 500}
+
+
+def test_calorie_totals_empty_input_is_all_zero():
+    result = aggregate.calorie_totals([], [], now=NOW)
+
+    assert result == {"this_week_estimate_kcal": 0, "this_month_estimate_kcal": 0}
+
+
+# --- calorie_trend -------------------------------------------------------------------
+
+
+def test_calorie_trend_weekly_buckets_zero_fill_and_oldest_first():
+    orders = [
+        _order(id="o1", ordered_at="2026-07-21T12:00:00Z"),  # week of 2026-07-20
+        _order(id="o2", ordered_at="2026-07-22T09:00:00Z"),  # week of 2026-07-20
+    ]
+    order_items = [
+        _item(order_id="o1", calorie_estimate=300),
+        _item(order_id="o2", calorie_estimate=150),
+    ]
+
+    result = aggregate.calorie_trend(orders, order_items, now=NOW, lookback=2)
+
+    assert result == [
+        {"period_start": "2026-07-13", "estimate_kcal": 0},
+        {"period_start": "2026-07-20", "estimate_kcal": 450},
+    ]
+
+
+def test_calorie_trend_skips_items_with_none_estimate():
+    orders = [_order(id="o1", ordered_at="2026-07-21T12:00:00Z")]
+    order_items = [
+        _item(order_id="o1", calorie_estimate=300),
+        _item(order_id="o1", calorie_estimate=None),
+    ]
+
+    result = aggregate.calorie_trend(orders, order_items, now=NOW, lookback=1)
+
+    assert result == [{"period_start": "2026-07-20", "estimate_kcal": 300}]
+
+
+def test_calorie_trend_orders_outside_lookback_window_are_dropped():
+    orders = [_order(id="o1", ordered_at="2026-01-01T00:00:00Z")]
+    order_items = [_item(order_id="o1", calorie_estimate=500)]
+
+    result = aggregate.calorie_trend(orders, order_items, now=NOW, lookback=1)
+
+    assert result == [{"period_start": "2026-07-20", "estimate_kcal": 0}]
+
+
+def test_calorie_trend_empty_input_returns_zeroed_buckets():
+    result = aggregate.calorie_trend([], [], now=NOW, lookback=3)
+
+    assert result == [
+        {"period_start": "2026-07-06", "estimate_kcal": 0},
+        {"period_start": "2026-07-13", "estimate_kcal": 0},
+        {"period_start": "2026-07-20", "estimate_kcal": 0},
+    ]
