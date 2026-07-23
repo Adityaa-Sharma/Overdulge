@@ -14,11 +14,11 @@ from fastapi.responses import RedirectResponse
 from app.core.auth import AuthedUser, get_current_user
 from app.core.config import get_settings
 from app.oauth import engine
-from app.oauth.platforms import swiggy
+from app.oauth.platforms import swiggy, zepto
 
 router = APIRouter()
 
-_PLATFORMS = {"swiggy": swiggy.CONFIG}
+_PLATFORMS = {"swiggy": swiggy.CONFIG, "zepto": zepto.CONFIG}
 
 
 def _platform_config(platform: str) -> engine.PlatformConfig:

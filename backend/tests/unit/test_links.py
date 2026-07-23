@@ -87,6 +87,39 @@ def test_start_link_returns_authorization_url(monkeypatch: pytest.MonkeyPatch) -
     assert response.json() == {"authorization_url": "https://auth.example/authorize?x=1"}
 
 
+def test_start_link_returns_authorization_url_for_zepto(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        links_module.engine,
+        "start_link",
+        lambda config, *, user_id: engine.AuthorizationRequest(
+            authorization_url="https://auth.zepto.co.in/authorize?x=1", state="s1"
+        ),
+    )
+    token = _make_token()
+
+    response = client.post(
+        "/api/v1/links/zepto/start", headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"authorization_url": "https://auth.zepto.co.in/authorize?x=1"}
+
+
+def test_callback_redirects_with_status_ok_for_zepto(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(links_module.engine, "handle_callback", lambda config, *, code, state: True)
+
+    response = client.get(
+        "/api/v1/links/zepto/callback",
+        params={"code": "c1", "state": "s1"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert (
+        response.headers["location"] == "https://overdulge.example/settings?linked=zepto&status=ok"
+    )
+
+
 def test_start_link_rejects_unknown_platform() -> None:
     token = _make_token()
 
