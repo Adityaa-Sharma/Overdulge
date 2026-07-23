@@ -103,3 +103,80 @@ export async function triggerSync(platform: SyncPlatform): Promise<void> {
     )
   }
 }
+
+/** Per-platform paise totals, keyed by the three sync platforms plus `combined`. */
+export interface PlatformPaiseTotals {
+  combined: number
+  swiggy_food: number
+  swiggy_instamart: number
+  zepto: number
+}
+
+export interface TrendPoint {
+  period_start: string
+  combined_paise: number
+  swiggy_food_paise: number
+  swiggy_instamart_paise: number
+  zepto_paise: number
+}
+
+export interface NamedSpend {
+  name: string
+  spend_paise: number
+  order_count: number
+}
+
+export interface PlatformOrderStats {
+  order_count: number
+  avg_order_value_paise: number | null
+}
+
+export interface LocationSpend {
+  address_id: string
+  spend_paise: number
+  order_count: number
+}
+
+/** Response contract for `GET /api/v1/dashboard` (FR-3 §3). */
+export interface DashboardResponse {
+  generated_at: string
+  has_data: boolean
+  totals: {
+    this_week_paise: PlatformPaiseTotals
+    this_month_paise: PlatformPaiseTotals
+  }
+  trend: {
+    weekly: TrendPoint[]
+    monthly: TrendPoint[]
+  }
+  category_breakdown: {
+    food_delivery_paise: number
+    grocery_paise: number
+    item_categories_paise: Record<string, number>
+  }
+  top_restaurants: NamedSpend[]
+  top_products: NamedSpend[]
+  order_stats: {
+    swiggy_food: PlatformOrderStats
+    swiggy_instamart: PlatformOrderStats
+    zepto: PlatformOrderStats
+  }
+  projection: {
+    month: string
+    spend_to_date_paise: PlatformPaiseTotals
+    days_elapsed: number
+    days_in_month: number
+    projected_total_paise: PlatformPaiseTotals
+    label: string
+  }
+  location_lens: LocationSpend[]
+}
+
+/** Fetches every figure the dashboard route needs in one call (FR-3). */
+export async function getDashboard(): Promise<DashboardResponse> {
+  const response = await apiFetch('/dashboard')
+  if (!response.ok) {
+    throw new ApiError('Failed to load dashboard', response.status)
+  }
+  return response.json()
+}
