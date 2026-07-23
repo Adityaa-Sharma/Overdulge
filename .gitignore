@@ -22,3 +22,8 @@ probe-report.md
 *.pem
 *.key
 *private-key*
+
+# GCP service-account key — NEVER commit
+gcp-key.json
+*-sa-key.json
+gcp-*.json
