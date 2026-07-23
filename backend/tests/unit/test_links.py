@@ -202,3 +202,127 @@ def test_callback_is_reachable_without_auth(monkeypatch: pytest.MonkeyPatch) -> 
     )
 
     assert response.status_code == 302
+
+
+class _FakeClient:
+    def __init__(self) -> None:
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+@pytest.fixture
+def fake_user_client(monkeypatch: pytest.MonkeyPatch):
+    captured: list[str] = []
+    fake = _FakeClient()
+
+    def _factory(jwt: str) -> _FakeClient:
+        captured.append(jwt)
+        return fake
+
+    monkeypatch.setattr(links_module, "user_client", _factory)
+    return captured, fake
+
+
+def test_list_links_requires_auth() -> None:
+    response = client.get("/api/v1/links")
+
+    assert response.status_code == 401
+
+
+def test_list_links_returns_status_for_every_supported_platform(
+    monkeypatch: pytest.MonkeyPatch, fake_user_client
+) -> None:
+    captured_jwts, fake = fake_user_client
+    monkeypatch.setattr(
+        links_module.linked_accounts,
+        "list_linked_accounts",
+        lambda client, *, user_id: [{"platform": "swiggy", "linked_at": "2026-07-01T00:00:00Z"}],
+    )
+    token = _make_token()
+
+    response = client.get("/api/v1/links", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert {"platform": "swiggy", "linked": True, "linked_at": "2026-07-01T00:00:00Z"} in body
+    assert {"platform": "zepto", "linked": False, "linked_at": None} in body
+    assert captured_jwts == [token]
+    assert fake.closed is True
+
+
+def test_list_links_never_returns_token_fields(
+    monkeypatch: pytest.MonkeyPatch, fake_user_client
+) -> None:
+    monkeypatch.setattr(
+        links_module.linked_accounts,
+        "list_linked_accounts",
+        lambda client, *, user_id: [
+            {
+                "platform": "swiggy",
+                "linked_at": "2026-07-01T00:00:00Z",
+                "tokens_encrypted": "ct-should-never-leak",
+            }
+        ],
+    )
+    token = _make_token()
+
+    response = client.get("/api/v1/links", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    for entry in response.json():
+        assert set(entry.keys()) == {"platform", "linked", "linked_at"}
+        assert "tokens_encrypted" not in entry.values()
+
+
+def test_unlink_requires_auth() -> None:
+    response = client.delete("/api/v1/links/swiggy")
+
+    assert response.status_code == 401
+
+
+def test_unlink_deletes_row_and_returns_no_content(
+    monkeypatch: pytest.MonkeyPatch, fake_user_client
+) -> None:
+    captured_jwts, fake = fake_user_client
+    captured_calls: list[dict[str, str]] = []
+    monkeypatch.setattr(
+        links_module.linked_accounts,
+        "delete_linked_account",
+        lambda client, *, user_id, platform: captured_calls.append(
+            {"user_id": user_id, "platform": platform}
+        ),
+    )
+    token = _make_token(user_id="user-456")
+
+    response = client.delete("/api/v1/links/swiggy", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert captured_calls == [{"user_id": "user-456", "platform": "swiggy"}]
+    assert captured_jwts == [token]
+    assert fake.closed is True
+
+
+def test_unlink_never_linked_platform_does_not_error(
+    monkeypatch: pytest.MonkeyPatch, fake_user_client
+) -> None:
+    monkeypatch.setattr(
+        links_module.linked_accounts,
+        "delete_linked_account",
+        lambda client, *, user_id, platform: None,
+    )
+    token = _make_token()
+
+    response = client.delete("/api/v1/links/zepto", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 204
+
+
+def test_unlink_rejects_unknown_platform() -> None:
+    token = _make_token()
+
+    response = client.delete("/api/v1/links/doordash", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 404

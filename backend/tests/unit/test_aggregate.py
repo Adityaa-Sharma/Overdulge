@@ -32,6 +32,12 @@ def _item(**overrides):
     return row
 
 
+def _budget(**overrides):
+    row = {"category": None, "cap_paise": 100}
+    row.update(overrides)
+    return row
+
+
 # --- spend_totals ---------------------------------------------------------
 
 
@@ -413,3 +419,87 @@ def test_location_lens_groups_by_address_excludes_null_and_other_platforms():
 
 def test_location_lens_empty_input_returns_empty_list():
     assert aggregate.location_lens([]) == []
+
+
+# --- budget_progress -----------------------------------------------------------------
+
+_BUDGET_ORDERS = [
+    _order(
+        id="o1", platform="swiggy_food", grand_total_paise=50000, ordered_at="2026-07-21T12:00:00Z"
+    ),
+    _order(
+        id="o2",
+        platform="swiggy_instamart",
+        grand_total_paise=30000,
+        ordered_at="2026-07-22T09:00:00Z",
+    ),
+    _order(id="o3", platform="zepto", grand_total_paise=20000, ordered_at="2026-06-15T00:00:00Z"),
+]
+_BUDGET_ITEMS = [
+    _item(order_id="o1", category="snacks", quantity=2, unit_price_paise=100),
+    _item(order_id="o2", category="snacks", quantity=1, unit_price_paise=300),
+    _item(order_id="o3", category="snacks", quantity=5, unit_price_paise=1000),
+    _item(order_id="o1", category="beverages", quantity=3, unit_price_paise=50),
+]
+
+
+def test_budget_progress_computes_overall_and_category_caps_for_current_month():
+    budgets = [
+        _budget(category=None, cap_paise=100000),
+        _budget(category="beverages", cap_paise=1000),
+    ]
+
+    result = aggregate.budget_progress(_BUDGET_ORDERS, _BUDGET_ITEMS, budgets, now=NOW)
+
+    assert result == [
+        {"category": None, "cap_paise": 100000, "spent_paise": 80000, "pct": 0.8, "status": "near"},
+        {
+            "category": "beverages",
+            "cap_paise": 1000,
+            "spent_paise": 150,
+            "pct": 0.15,
+            "status": "ok",
+        },
+    ]
+
+
+def test_budget_progress_category_with_no_matching_spend_is_zero_and_ok():
+    budgets = [_budget(category="produce", cap_paise=200)]
+
+    result = aggregate.budget_progress(_BUDGET_ORDERS, _BUDGET_ITEMS, budgets, now=NOW)
+
+    assert result == [
+        {"category": "produce", "cap_paise": 200, "spent_paise": 0, "pct": 0.0, "status": "ok"}
+    ]
+
+
+def test_budget_progress_status_boundaries_at_exactly_80_and_100_percent():
+    budgets = [
+        _budget(category=None, cap_paise=100000),  # spent 80000 -> exactly 80%
+        _budget(category="snacks", cap_paise=500),  # spent 500 -> exactly 100%
+    ]
+
+    result = aggregate.budget_progress(_BUDGET_ORDERS, _BUDGET_ITEMS, budgets, now=NOW)
+
+    assert result[0]["pct"] == 0.8
+    assert result[0]["status"] == "near"
+    assert result[1]["pct"] == 1.0
+    assert result[1]["status"] == "over"
+
+
+def test_budget_progress_multiple_caps_each_get_independent_rows():
+    budgets = [
+        _budget(category=None, cap_paise=100000),
+        _budget(category="snacks", cap_paise=500),
+        _budget(category="beverages", cap_paise=1000),
+        _budget(category="produce", cap_paise=200),
+    ]
+
+    result = aggregate.budget_progress(_BUDGET_ORDERS, _BUDGET_ITEMS, budgets, now=NOW)
+
+    assert [row["category"] for row in result] == [None, "snacks", "beverages", "produce"]
+    assert [row["status"] for row in result] == ["near", "over", "ok", "ok"]
+
+
+def test_budget_progress_empty_budgets_returns_empty_list():
+    assert aggregate.budget_progress(_BUDGET_ORDERS, _BUDGET_ITEMS, [], now=NOW) == []

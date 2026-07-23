@@ -245,6 +245,53 @@ def spend_projection(orders: list[Row], *, now: datetime) -> dict[str, Any]:
     }
 
 
+def _budget_status(pct: float) -> Literal["ok", "near", "over"]:
+    if pct >= 1.0:
+        return "over"
+    if pct >= 0.8:
+        return "near"
+    return "ok"
+
+
+def budget_progress(
+    orders: list[Row],
+    order_items: list[Row],
+    budgets: list[Row],
+    *,
+    now: datetime,
+) -> list[dict[str, Any]]:
+    current_month_order_ids = {
+        order["id"]
+        for order in orders
+        if (parsed := _parse_timestamp(order["ordered_at"])).year == now.year
+        and parsed.month == now.month
+    }
+    current_month_items = [
+        item for item in order_items if item.get("order_id") in current_month_order_ids
+    ]
+    category_spend_paise = category_breakdown([], current_month_items)["item_categories_paise"]
+    overall_spent_paise = spend_totals(orders, now=now)["this_month_paise"]["combined"]
+
+    rows = []
+    for budget in budgets:
+        category = budget.get("category")
+        cap_paise = budget["cap_paise"]
+        spent_paise = (
+            overall_spent_paise if category is None else category_spend_paise.get(category, 0)
+        )
+        pct = spent_paise / cap_paise
+        rows.append(
+            {
+                "category": category,
+                "cap_paise": cap_paise,
+                "spent_paise": spent_paise,
+                "pct": pct,
+                "status": _budget_status(pct),
+            }
+        )
+    return rows
+
+
 def location_lens(orders: list[Row], *, limit: int = 20) -> list[dict[str, Any]]:
     food_orders = [order for order in orders if order.get("platform") == "swiggy_food"]
     return _grouped_ranking(

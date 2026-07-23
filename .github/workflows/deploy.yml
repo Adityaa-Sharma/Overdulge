@@ -50,6 +50,12 @@ jobs:
         run: |
           if [ -d frontend ]; then
             cd frontend && npm ci && npm run build
+            # SPA fallback: the app uses client-side routing, but GitHub Pages
+            # serves static files — a direct hit or reload on /login (or any
+            # route) 404s because no such file exists. Copying index.html to
+            # 404.html makes Pages return the SPA for unknown paths so the
+            # React router can take over. Without this, every deep link 404s.
+            cp dist/index.html dist/404.html
           else
             mkdir -p frontend/dist && echo "Overdulge: coming soon" > frontend/dist/index.html
           fi

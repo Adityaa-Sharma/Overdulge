@@ -1,34 +1,26 @@
-import { useEffect, useState } from 'react'
-import { Navigate } from 'react-router-dom'
-import { getSession } from '../lib/supabase'
-
-type SessionStatus = 'checking' | 'authenticated' | 'anonymous'
+import { useState } from 'react'
+import { useSession } from '../lib/session'
 
 export default function Protected() {
-  const [status, setStatus] = useState<SessionStatus>('checking')
+  const { logout } = useSession()
+  const [loggingOut, setLoggingOut] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-    getSession().then((session) => {
-      if (!cancelled) setStatus(session ? 'authenticated' : 'anonymous')
-    })
-    return () => {
-      cancelled = true
+  async function handleLogout() {
+    setLoggingOut(true)
+    try {
+      await logout()
+    } finally {
+      setLoggingOut(false)
     }
-  }, [])
-
-  if (status === 'checking') {
-    return <p role="status">Checking session…</p>
-  }
-
-  if (status === 'anonymous') {
-    return <Navigate to="/login" replace />
   }
 
   return (
     <main>
       <h1>Overdulge</h1>
       <p>You're signed in. The dashboard is coming soon.</p>
+      <button type="button" onClick={handleLogout} disabled={loggingOut}>
+        {loggingOut ? 'Logging out…' : 'Log out'}
+      </button>
     </main>
   )
 }

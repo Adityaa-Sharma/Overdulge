@@ -9,8 +9,13 @@ name: Kick (drain the ready queue)
 # should not consume Claude subscription usage.
 on:
   schedule:
-    - cron: "15 * * * *"   # hourly, at :15 past
+    - cron: "15 * * * *"   # hourly, at :15 past (safety net)
   workflow_dispatch: {}
+  # Run right after CI or the SA gate finishes, so an approved PR merges within
+  # ~a minute instead of waiting up to an hour for the next scheduled kick.
+  workflow_run:
+    workflows: ["CI", "SA Agent - PR Gate"]
+    types: [completed]
 concurrency:
   group: kick
   cancel-in-progress: false
@@ -42,32 +47,43 @@ jobs:
           # sa.md + workflows into the PR) and fires a fresh pull_request event.
           for n in $(gh pr list --repo "$REPO" --state open --limit 50 \
                        --json number,isDraft --jq '.[] | select(.isDraft | not) | .number'); do
-            if [ "$(gh api "repos/$REPO/pulls/$n/reviews" --jq 'length')" != "0" ]; then
-              echo "PR #$n: already reviewed."
+            pr=$(gh api "repos/$REPO/pulls/$n")
+            sha=$(echo "$pr" | jq -r .head.sha)
+            ms=$(echo "$pr" | jq -r .mergeable_state)
+            # "Reviewed" MUST be measured by the SA gate's `review` CHECK-RUN, not
+            # by formal PR reviews: SA and Dev are the same GitHub App, so SA can
+            # never submit a formal review — gh pulls/N/reviews is ALWAYS 0. Using
+            # it re-fired SA on every kick forever, kept a review in_progress, made
+            # mergeable_state "unstable", and blocked the merge. THIS is what kept
+            # approved PRs from merging.
+            rv=$(gh api "repos/$REPO/commits/$sha/check-runs" \
+                   --jq '[.check_runs[] | select(.name == "review")]
+                         | {ok: (any(.conclusion == "success")),
+                            running: (any(.status != "completed"))}')
+            ok=$(echo "$rv" | jq -r .ok); running=$(echo "$rv" | jq -r .running)
+            if [ "$ok" = "true" ] || [ "$running" = "true" ]; then
+              echo "PR #$n: SA gate ok=$ok running=$running on $sha — leave it"
               continue
             fi
-            behind=$(gh api "repos/$REPO/pulls/$n" --jq '.base.ref as $b | .head.sha' >/dev/null 2>&1; \
-                     gh api "repos/$REPO/pulls/$n" --jq \
-                       'if .mergeable_state == "behind" or .mergeable_state == "dirty" then "behind" else "current" end')
-            sha=$(gh api "repos/$REPO/pulls/$n" --jq '.head.sha')
-            state=$(gh api "repos/$REPO/commits/$sha/check-runs" \
-                      --jq '[.check_runs[] | select(.name != "review")] as $c
-                            | if   ($c | length) == 0                 then "none"
-                              elif ($c | any(.status != "completed")) then "pending"
-                              else "settled" end')
-            echo "PR #$n: no review, CI=$state, branch=$behind"
-            if [ "$behind" = "behind" ]; then
-              # Pull latest main (and current instructions) into the PR; this
-              # re-triggers CI + SA on a fresh commit.
-              if gh api -X PUT "repos/$REPO/pulls/$n/update-branch" >/dev/null 2>&1; then
-                echo "  -> updated branch for #$n (brings in current sa.md + re-fires SA)"
-              fi
-            elif [ "$state" = "settled" ]; then
-              # Branch is current but SA still never reviewed — re-fire via label.
+            # Not yet reviewed on this head. If behind, update the branch (also
+            # brings in current sa.md); else re-fire SA once CI has settled.
+            if [ "$ms" = "behind" ] || [ "$ms" = "dirty" ]; then
+              gh api -X PUT "repos/$REPO/pulls/$n/update-branch" >/dev/null 2>&1 \
+                && echo "PR #$n: updated branch (re-fires CI + SA)"
+              continue
+            fi
+            ci=$(gh api "repos/$REPO/commits/$sha/check-runs" \
+                   --jq '[.check_runs[] | select(.name != "review")] as $c
+                         | if ($c|length)==0 then "none"
+                           elif ($c | any(.status != "completed")) then "pending"
+                           else "settled" end')
+            if [ "$ci" = "settled" ]; then
               gh issue edit "$n" --repo "$REPO" --remove-label needs-review >/dev/null 2>&1 || true
               sleep 3
               gh issue edit "$n" --repo "$REPO" --add-label needs-review >/dev/null 2>&1 \
-                && echo "  -> re-fired SA review for #$n"
+                && echo "PR #$n: re-fired SA review (CI settled, no review yet)"
+            else
+              echo "PR #$n: waiting on CI ($ci)"
             fi
           done
 
@@ -107,23 +123,35 @@ jobs:
                 && echo "PR #$n: dirty — labelled changes-requested to route conflict to Developer"
               continue
             fi
-            if [ "$ms" != "clean" ]; then
-              echo "PR #$n: mergeable_state=$ms — skip (transient, next hour)"; continue
+            # behind main → let the re-fire step update the branch; not our job.
+            if [ "$ms" = "behind" ]; then
+              echo "PR #$n: behind main — skip (branch-update step handles it)"; continue
             fi
             # escalated?
-            esc=$(gh api "repos/$REPO/issues/$n" \
-                    --jq '[.labels[].name | select(. == "escalation:human")] | length')
+            esc=$(echo "$pr" | jq -r '[.labels[].name | select(. == "escalation:human")] | length')
             if [ "$esc" != "0" ]; then
               echo "PR #$n: escalation:human — skip"; continue
             fi
-            # did the SA gate actually run successfully on the current head?
+            # Gate on the actual CHECK-RUNS on the current head, not on
+            # mergeable_state=="clean": a re-triggered SA review turns the state
+            # "unstable" even though everything required is green. Require the
+            # SA gate (review) AND CI (backend+frontend) all green, and no check
+            # still in progress.
             sha=$(echo "$pr" | jq -r .head.sha)
-            sa_ok=$(gh api "repos/$REPO/commits/$sha/check-runs" \
-                      --jq '[.check_runs[] | select(.name == "review" and .conclusion == "success")] | length')
-            if [ "$sa_ok" = "0" ]; then
-              echo "PR #$n: SA gate has not succeeded on head $sha — skip"; continue
+            gate=$(gh api "repos/$REPO/commits/$sha/check-runs" \
+                     --jq '{
+                       review:   (any(.check_runs[]; .name=="review"   and .conclusion=="success")),
+                       backend:  (any(.check_runs[]; .name=="backend"  and .conclusion=="success")),
+                       frontend: (any(.check_runs[]; .name=="frontend" and .conclusion=="success")),
+                       running:  (any(.check_runs[]; .status!="completed"))
+                     }')
+            if [ "$(echo "$gate" | jq -r .running)" = "true" ]; then
+              echo "PR #$n: a check is still running — wait"; continue
             fi
-            echo "PR #$n: CI green, SA ran, no objection -> merging"
+            if [ "$(echo "$gate" | jq -r '.review and .backend and .frontend')" != "true" ]; then
+              echo "PR #$n: gate not all-green ($gate) — skip"; continue
+            fi
+            echo "PR #$n: review+CI green, no objection -> merging"
             gh pr merge "$n" --repo "$REPO" --squash --delete-branch \
               && echo "  -> merged #$n" \
               || echo "  -> merge failed for #$n (branch protection or race)"
