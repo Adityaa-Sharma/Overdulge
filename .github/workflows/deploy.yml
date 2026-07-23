@@ -39,6 +39,14 @@ jobs:
         with:
           node-version: "22"
       - name: Build (if present)
+        # Vite inlines VITE_* at BUILD time. Without these the deployed app has
+        # undefined Supabase config and hangs on "Checking session…". They are
+        # public client config (anon key is safe to ship to the browser), not
+        # secrets — the service-role key is never exposed here.
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
         run: |
           if [ -d frontend ]; then
             cd frontend && npm ci && npm run build
