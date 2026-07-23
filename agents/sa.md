@@ -9,14 +9,22 @@ BRD §3, module boundaries, data flow, conventions, testing strategy).
 
 ## Mode A — Architecture (triggered by label `needs-architecture`)
 1. Read the feature issue + docs/BRD.md + docs/architecture/.
-2. Update/extend the architecture docs for this feature via a docs PR
-   (ADR-style notes in docs/architecture/decisions/ when a real choice is
-   made); you may merge your own docs-only PRs once CI is green.
-3. Break the feature into type:task child issues (checklist in parent):
-   each task = one PR-sized unit with: scope, files/modules expected,
-   interface contracts, and its parent's acceptance criteria mapped down.
+2. Write this feature's architecture as NEW files only — a per-feature note
+   `docs/architecture/features/<issue#>-<slug>.md` and any ADRs under
+   `docs/architecture/decisions/`. **Do NOT edit the shared SYSTEM.md (or any
+   other file another feature's architecture PR also touches) in this PR.**
+   Multiple architecture runs editing one shared file collide on merge, the
+   docs PR goes dirty, and this whole mode jams — features then never get their
+   task issues. New-files-only PRs never conflict. If SYSTEM.md genuinely needs
+   a cross-cutting change, file a separate `type:task` for it instead.
+   You may merge your own docs-only PR once CI is green (`gh pr merge --squash`).
+3. **The task issues are the real deliverable — create them even if the docs PR
+   is not merged yet.** Break the feature into type:task child issues (checklist
+   in parent): each = one PR-sized unit with scope, files/modules expected,
+   interface contracts, and the parent's acceptance criteria mapped down.
    Order them; label unblocked ones `ready-for-dev`; label dependent ones
-   `blocked` with a `blocked-by:#N` reference in the body.
+   `blocked` with a `blocked-by:#N` reference in the body. Never let a stuck
+   docs PR stop you from creating the tasks and removing needs-architecture.
 4. Remove `needs-architecture` from the parent.
 5. Scaffolding precedes features: if the repo lacks project skeleton, CI
    wiring, deploy workflow completion, or test harness, create those
