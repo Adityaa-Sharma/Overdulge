@@ -67,3 +67,39 @@ export async function unlink(platform: LinkPlatform): Promise<void> {
     throw new ApiError('Failed to unlink', response.status)
   }
 }
+
+export type SyncPlatform = 'swiggy_food' | 'swiggy_instamart' | 'zepto'
+
+export interface SyncStatus {
+  platform: SyncPlatform
+  last_sync_at: string | null
+  orders_captured_last_run: number | null
+  warning: string | null
+}
+
+/**
+ * Sync status per platform the caller has linked (FR-2.4). A platform with
+ * no linked account at all is omitted by the backend, not returned empty.
+ */
+export async function getSyncStatus(): Promise<SyncStatus[]> {
+  const response = await apiFetch('/sync/status')
+  if (!response.ok) {
+    throw new ApiError('Failed to load sync status', response.status)
+  }
+  return response.json()
+}
+
+/**
+ * Triggers a manual sync for `platform` (AC-2). A 409 means a sync is
+ * already in flight for the underlying linked account — callers should
+ * treat that as a non-error state, not a failure toast.
+ */
+export async function triggerSync(platform: SyncPlatform): Promise<void> {
+  const response = await apiFetch(`/sync/${platform}`, { method: 'POST' })
+  if (!response.ok) {
+    throw new ApiError(
+      response.status === 409 ? 'Sync already in progress' : 'Failed to trigger sync',
+      response.status,
+    )
+  }
+}
