@@ -14,6 +14,7 @@ Digest content is numbers-only (ADR-0007 §3) — no LLM call here, unlike
 
 from __future__ import annotations
 
+import html
 from datetime import datetime
 from typing import Any
 
@@ -27,7 +28,7 @@ def _format_inr(paise: int) -> str:
 
 
 def _budget_row_html(progress: dict[str, Any]) -> str:
-    label = progress["category"] or "Overall"
+    label = html.escape(progress["category"] or "Overall")
     return (
         "<tr>"
         f"<td>{label}</td>"

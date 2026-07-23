@@ -58,6 +58,36 @@ def test_render_lists_progress_for_every_budget_row():
     assert "On track" in html
 
 
+def test_render_escapes_html_special_characters_in_category():
+    orders = [
+        {
+            "id": "o1",
+            "platform": "zepto",
+            "ordered_at": "2026-07-19T12:00:00+00:00",
+            "grand_total_paise": 5000,
+        }
+    ]
+    order_items = [
+        {
+            "order_id": "o1",
+            "category": '<a href="http://phishing.example">food</a> & "drinks"',
+            "quantity": 1,
+            "unit_price_paise": 5000,
+        }
+    ]
+    budgets = [
+        {
+            "category": '<a href="http://phishing.example">food</a> & "drinks"',
+            "cap_paise": 10000,
+        }
+    ]
+
+    rendered = render_digest_html(orders, order_items, budgets, now=_NOW)
+
+    assert "<a href=" not in rendered
+    assert "&lt;a href=&quot;http://phishing.example&quot;&gt;food&lt;/a&gt;" in rendered
+
+
 def test_render_shows_empty_state_when_no_budgets_set():
     html = render_digest_html([], [], [], now=_NOW)
 
