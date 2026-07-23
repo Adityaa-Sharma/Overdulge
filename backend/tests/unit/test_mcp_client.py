@@ -36,10 +36,72 @@ def test_call_tool_sends_json_rpc_envelope_and_returns_result():
     request = captured[0]
     assert request.method == "POST"
     assert request.headers["Authorization"] == "Bearer access-token"
+    # Streamable HTTP rejects the request with 406 unless BOTH types are
+    # accepted — the exact failure that stopped every real sync.
+    accept = request.headers["Accept"]
+    assert "application/json" in accept
+    assert "text/event-stream" in accept
     sent = _sent_json(request)
     assert sent["jsonrpc"] == "2.0"
     assert sent["method"] == "tools/call"
     assert sent["params"] == {"name": "get_orders", "arguments": {"orderType": "DASH"}}
+
+
+def test_call_tool_parses_a_result_delivered_as_sse():
+    # Streamable HTTP servers may answer with text/event-stream instead of a
+    # plain JSON object; the result rides in a `data:` frame.
+    def handler(request: httpx.Request) -> httpx.Response:
+        stream = (
+            "event: message\n"
+            'data: {"jsonrpc":"2.0","id":1,"result":{"orders":[{"id":"sse-1"}]}}\n\n'
+        )
+        return httpx.Response(200, text=stream, headers={"content-type": "text/event-stream"})
+
+    result = client.call_tool(
+        "https://mcp.example.com/rpc",
+        "access-token",
+        "get_orders",
+        {},
+        transport=_transport(handler),
+    )
+
+    assert result == {"orders": [{"id": "sse-1"}]}
+
+
+def test_call_tool_returns_the_final_frame_when_sse_carries_progress_first():
+    def handler(request: httpx.Request) -> httpx.Response:
+        stream = (
+            "event: message\n"
+            'data: {"jsonrpc":"2.0","method":"notifications/progress","params":{"p":1}}\n\n'
+            "event: message\n"
+            'data: {"jsonrpc":"2.0","id":1,"result":{"orders":[]}}\n\n'
+        )
+        return httpx.Response(200, text=stream, headers={"content-type": "text/event-stream"})
+
+    result = client.call_tool(
+        "https://mcp.example.com/rpc",
+        "access-token",
+        "get_orders",
+        {},
+        transport=_transport(handler),
+    )
+
+    assert result == {"orders": []}
+
+
+def test_call_tool_raises_typed_error_on_json_rpc_error_delivered_as_sse():
+    def handler(request: httpx.Request) -> httpx.Response:
+        stream = (
+            "event: message\n"
+            'data: {"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"nope"}}\n\n'
+        )
+        return httpx.Response(200, text=stream, headers={"content-type": "text/event-stream"})
+
+    with pytest.raises(client.McpRpcError) as excinfo:
+        client.call_tool(
+            "https://mcp.example.com/rpc", "access-token", "x", {}, transport=_transport(handler)
+        )
+    assert excinfo.value.code == -32601
 
 
 def test_call_tool_raises_typed_error_on_json_rpc_error_field():
