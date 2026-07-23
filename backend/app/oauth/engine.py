@@ -155,7 +155,7 @@ def handle_callback(
             db_client,
             user_id=user_id,
             platform=config.name,
-            tokens_encrypted=_encode_tokens(token_set),
+            tokens_encrypted=encode_tokens(token_set),
         )
         linked_accounts.delete_pending_link(db_client, user_id=user_id, platform=config.name)
         return True
@@ -212,6 +212,19 @@ def decode_tokens(tokens_encrypted: str) -> TokenSet:
     """Decrypts a `linked_accounts.tokens_encrypted` value into a `TokenSet`."""
     payload = json.loads(crypto.decrypt(tokens_encrypted))
     return TokenSet(**payload)
+
+
+def encode_tokens(token_set: TokenSet) -> str:
+    """Inverse of `decode_tokens` — encrypts a `TokenSet` for storage in
+    `linked_accounts.tokens_encrypted`. Used by `handle_callback` and by
+    `sync/cron.py` after a token refresh (ADR-0005 §4).
+    """
+    payload = {
+        "access_token": token_set.access_token,
+        "refresh_token": token_set.refresh_token,
+        "expires_at": token_set.expires_at,
+    }
+    return crypto.encrypt(json.dumps(payload).encode("utf-8"))
 
 
 def _redirect_uri(platform: str) -> str:
@@ -351,12 +364,3 @@ def _token_set_from_response(payload: dict[str, Any]) -> TokenSet:
         refresh_token=payload.get("refresh_token"),
         expires_at=expires_at,
     )
-
-
-def _encode_tokens(token_set: TokenSet) -> str:
-    payload = {
-        "access_token": token_set.access_token,
-        "refresh_token": token_set.refresh_token,
-        "expires_at": token_set.expires_at,
-    }
-    return crypto.encrypt(json.dumps(payload).encode("utf-8"))

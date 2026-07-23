@@ -53,6 +53,77 @@ def delete_linked_account(client: PostgrestClient, *, user_id: str, platform: st
     )
 
 
+def set_tokens(
+    client: PostgrestClient, *, user_id: str, platform: str, tokens_encrypted: str
+) -> dict[str, Any]:
+    """Updates only `tokens_encrypted` (e.g. after `oauth/engine.py`'s
+    `refresh_tokens`). Only `user_id`/`platform`/`tokens_encrypted` are sent,
+    so PostgREST's `merge-duplicates` resolution leaves `sync_state` and
+    `last_sync_at` untouched — callers never need to read those back first.
+    """
+    row = {"user_id": user_id, "platform": platform, "tokens_encrypted": tokens_encrypted}
+    rows = client.upsert("linked_accounts", row, on_conflict="user_id,platform")
+    return rows[0]
+
+
+def set_sync_status(
+    client: PostgrestClient,
+    *,
+    user_id: str,
+    platform: str,
+    sync_state: dict[str, Any],
+    status: str,
+    syncing_since: str | None = None,
+    last_error: str | None = None,
+) -> dict[str, Any]:
+    """Writes `sync_state.status`/`syncing_since`/`last_error`, preserving
+    `orders_captured_last_run` from the `sync_state` the caller already has
+    in hand (e.g. from `list_linked_accounts`) — callers never hand-roll the
+    jsonb merge themselves (ADR-0005 §4/§6).
+    """
+    updated_sync_state = {
+        **sync_state,
+        "status": status,
+        "syncing_since": syncing_since,
+        "last_error": last_error,
+    }
+    row = {"user_id": user_id, "platform": platform, "sync_state": updated_sync_state}
+    rows = client.upsert("linked_accounts", row, on_conflict="user_id,platform")
+    return rows[0]
+
+
+def record_sync_result(
+    client: PostgrestClient,
+    *,
+    user_id: str,
+    platform: str,
+    sync_state: dict[str, Any],
+    orders_captured: dict[str, int],
+    synced_at: str,
+) -> dict[str, Any]:
+    """Records a *successful* sync: resets the lock to idle, clears
+    `last_error`, records `orders_captured_last_run`, and writes
+    `linked_accounts.last_sync_at` — the only path that ever writes that
+    column (ADR-0005 §4: it is the single source of truth for "last
+    successful sync").
+    """
+    updated_sync_state = {
+        **sync_state,
+        "status": "idle",
+        "syncing_since": None,
+        "last_error": None,
+        "orders_captured_last_run": orders_captured,
+    }
+    row = {
+        "user_id": user_id,
+        "platform": platform,
+        "last_sync_at": synced_at,
+        "sync_state": updated_sync_state,
+    }
+    rows = client.upsert("linked_accounts", row, on_conflict="user_id,platform")
+    return rows[0]
+
+
 def upsert_pending_link(
     client: PostgrestClient,
     *,
