@@ -54,6 +54,9 @@ backend/
     sync/
       cron.py         Cron Trigger entrypoint, iterates linked_accounts
       normalize.py    canonical schema mapping (BRD §2.4-§2.8, §5)
+    analytics/
+      aggregate.py    pure aggregation functions over orders/order_items
+                      rows (no I/O) — see ADR-0006
     llm/
       agent.py        LangChain agent(s) over the canonical schema
   tests/
@@ -186,3 +189,6 @@ See `docs/architecture/decisions/`:
   adapter / normalize split, one shared sync-core function for cron +
   manual trigger with an in-flight lock, and why a single `swiggy` linked
   account fans out into `swiggy_food` + `swiggy_instamart` orders.
+- [ADR-0006](decisions/0006-dashboard-aggregation-in-python.md) — dashboard
+  and analytics aggregation computed in Python over PostgREST rows, not DB
+  views or RPCs; shared `analytics/aggregate.py` for FR-3/FR-4/FR-5.
