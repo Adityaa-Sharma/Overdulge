@@ -1,5 +1,8 @@
-"""Generic JSON-RPC-over-streamable-HTTP client for MCP order-history tools
-(ADR-0003: docs/architecture/decisions/0003-order-sync-and-normalization.md).
+"""Generic JSON-RPC-over-streamable-HTTP client for MCP order-history tools.
+Design rationale: issue #3 / #44. (The order-sync ADR proposed in #32 has not
+merged yet and, once it does, cannot be ADR-0003 — that number is already
+taken by docs/architecture/decisions/0003-nl-query-engine-tool-calling.md —
+so it isn't cited here until the real number is assigned.)
 
 Platform-blind by design: it has no knowledge of Swiggy, Instamart, or
 Zepto, and no knowledge of which tool names are safe to call — that split
