@@ -151,8 +151,14 @@ export default function Settings() {
 
   return (
     <main>
-      <h1>Account settings</h1>
-      <p>Link your Swiggy and Zepto accounts so Overdulge can sync your order history.</p>
+      <div className="page-head">
+        <span className="eyebrow">Connections</span>
+        <h1>Account settings</h1>
+        <p className="muted">
+          Securely connect Swiggy and Zepto so Overdulge can sync your order history. Access is
+          read-only — Overdulge can never place, change, or cancel an order.
+        </p>
+      </div>
 
       {toast && (
         <p role={toast.kind === 'error' ? 'alert' : 'status'} className="toast">

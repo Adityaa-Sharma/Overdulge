@@ -60,9 +60,16 @@ export default function Login() {
     <div className="auth">
       <div className="auth__card card card--pad-lg">
         <div className="auth__brand">
-          <span className="brand__mark" aria-hidden="true" />
-          <h1>Welcome to Overdulge</h1>
-          <p className="muted">Sign in to see where your food spend really goes.</p>
+          <span className="brand__mark" aria-hidden="true">
+            <span>O</span>
+          </span>
+          <h1>
+            Your cravings, <span className="hl">itemised</span>
+          </h1>
+          <p className="muted">
+            Overdulge reads your Swiggy and Zepto history and shows you the tasty truth about
+            where the money went.
+          </p>
         </div>
 
       {error && <p role="alert">{error}</p>}
@@ -117,6 +124,10 @@ export default function Login() {
         <button className="btn-block" type="button" onClick={handleGoogleSignIn} disabled={pending === 'google'}>
           {pending === 'google' ? 'Redirecting…' : 'Continue with Google'}
         </button>
+
+        <p className="auth__trust">
+          Read-only by design. We never place orders, and never sell your data.
+        </p>
       </div>
     </div>
   )
