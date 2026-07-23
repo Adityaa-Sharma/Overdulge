@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     openai_api_version: str | None = None
     azure_openai_deployment: str | None = None
     token_encryption_key: str | None = None
+    backend_base_url: str | None = None
+    frontend_settings_url: str | None = None
 
 
 @lru_cache
