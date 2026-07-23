@@ -18,11 +18,16 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 # psycopg is intentionally NOT a backend runtime dependency — the app talks to
 # Postgres through PostgREST. The deploy installs it just for this script, so
 # the import is deferred to keep the pure helpers (and their tests) importable
-# without it.
+# without it. Type checkers and linters still need the name to exist, hence the
+# TYPE_CHECKING import; `from __future__ import annotations` keeps the
+# annotation itself from being evaluated at runtime.
+if TYPE_CHECKING:
+    import psycopg
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "supabase" / "migrations"
 

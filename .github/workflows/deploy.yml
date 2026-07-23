@@ -71,7 +71,7 @@ jobs:
             --image "$IMAGE:${{ github.sha }}" \
             --region "$REGION" --platform managed --allow-unauthenticated \
             --port 8080 --cpu 1 --memory 512Mi --min-instances 0 --max-instances 3 \
-            --set-env-vars "^@@^SUPABASE_URL=${{ secrets.SUPABASE_URL }}@@SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}@@SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}@@TOKEN_ENCRYPTION_KEY=${{ secrets.TOKEN_ENCRYPTION_KEY }}@@GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}@@FRONTEND_SETTINGS_URL=https://adityaa-sharma.github.io/Overdulge/"
+            --set-env-vars "^@@^SUPABASE_URL=${{ secrets.SUPABASE_URL }}@@SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}@@SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}@@TOKEN_ENCRYPTION_KEY=${{ secrets.TOKEN_ENCRYPTION_KEY }}@@GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}@@BACKEND_BASE_URL=${{ secrets.BACKEND_BASE_URL }}@@FRONTEND_SETTINGS_URL=https://adityaa-sharma.github.io/Overdulge/"
 
           URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
           echo "Deployed: $URL"
