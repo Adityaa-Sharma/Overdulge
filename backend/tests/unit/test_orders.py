@@ -78,3 +78,23 @@ def test_list_order_items_filters_by_order_id():
 
     assert result == [{"name": "item"}]
     assert captured[0].url.params["order_id"] == "eq.o1"
+
+
+def test_list_order_items_for_orders_filters_with_in_clause():
+    captured: list[httpx.Request] = []
+    client = _client_returning([{"name": "item"}], captured)
+
+    result = orders.list_order_items_for_orders(client, order_ids=["o1", "o2"])
+
+    assert result == [{"name": "item"}]
+    assert captured[0].url.params["order_id"] == "in.(o1,o2)"
+
+
+def test_list_order_items_for_orders_skips_request_when_no_order_ids():
+    captured: list[httpx.Request] = []
+    client = _client_returning([{"name": "item"}], captured)
+
+    result = orders.list_order_items_for_orders(client, order_ids=[])
+
+    assert result == []
+    assert captured == []
