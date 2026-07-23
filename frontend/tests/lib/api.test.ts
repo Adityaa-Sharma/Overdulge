@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, getLinkStatus, startLink, unlink } from '../../src/lib/api'
+import {
+  ApiError,
+  getDashboard,
+  getLinkStatus,
+  getSyncStatus,
+  startLink,
+  triggerSync,
+  unlink,
+} from '../../src/lib/api'
 
 const { getSession } = vi.hoisted(() => ({ getSession: vi.fn() }))
 
@@ -81,5 +89,66 @@ describe('unlink', () => {
     mockFetchOnce({ ok: false, status: 404 })
 
     await expect(unlink('swiggy')).rejects.toThrow(ApiError)
+  })
+})
+
+/**
+ * These assert the *whole* path, not a fragment of it. The production outage
+ * that 404'd every authenticated call shipped past a suite that only checked
+ * `toContain('/links')` — which passes just as happily against a URL missing
+ * the /api/v1 prefix entirely. Anchoring to the end is what makes them useful.
+ */
+describe('request URLs', () => {
+  it.each([
+    ['getLinkStatus', () => getLinkStatus(), /\/api\/v1\/links$/],
+    ['startLink', () => startLink('swiggy'), /\/api\/v1\/links\/swiggy\/start$/],
+    ['unlink', () => unlink('zepto'), /\/api\/v1\/links\/zepto$/],
+    ['getSyncStatus', () => getSyncStatus(), /\/api\/v1\/sync\/status$/],
+    ['triggerSync', () => triggerSync('zepto'), /\/api\/v1\/sync\/zepto$/],
+    ['getDashboard', () => getDashboard(), /\/api\/v1\/dashboard$/],
+  ])('%s targets the versioned API path', async (_name, call, expected) => {
+    const fetchMock = mockFetchOnce({ json: async () => ({}) })
+
+    await call()
+
+    expect(fetchMock.mock.calls[0][0]).toMatch(expected)
+  })
+
+  it('never doubles the /api/v1 prefix', async () => {
+    const fetchMock = mockFetchOnce({ json: async () => ({}) })
+
+    await getLinkStatus()
+
+    expect(fetchMock.mock.calls[0][0]).not.toContain('/api/v1/api/v1')
+  })
+})
+
+describe('startLink failure messages', () => {
+  it("surfaces the backend's explanation so the UI can show why linking failed", async () => {
+    mockFetchOnce({
+      ok: false,
+      status: 502,
+      json: async () => ({ detail: "Zepto isn't accepting Overdulge's connection request." }),
+    })
+
+    await expect(startLink('zepto')).rejects.toThrow(/isn't accepting/)
+  })
+
+  it('falls back to a generic message when the body is not JSON', async () => {
+    mockFetchOnce({
+      ok: false,
+      status: 502,
+      json: async () => {
+        throw new SyntaxError('Unexpected token <')
+      },
+    })
+
+    await expect(startLink('swiggy')).rejects.toThrow('Failed to start link')
+  })
+
+  it('keeps the status code so callers can distinguish 502 from other failures', async () => {
+    mockFetchOnce({ ok: false, status: 502, json: async () => ({ detail: 'nope' }) })
+
+    await expect(startLink('swiggy')).rejects.toMatchObject({ status: 502 })
   })
 })

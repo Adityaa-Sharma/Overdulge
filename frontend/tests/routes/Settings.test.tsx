@@ -131,6 +131,57 @@ describe('Settings', () => {
     )
   })
 
+  it("shows the backend's reason when linking can't start, instead of telling the user to retry", async () => {
+    // "Please try again" is worse than useless when the platform has refused
+    // our callback domain — it sends the user round a loop that cannot work.
+    getLinkStatus.mockResolvedValue(NOT_LINKED)
+    startLink.mockRejectedValue(
+      new ApiError("Zepto isn't accepting Overdulge's connection request right now.", 502),
+    )
+
+    renderSettings()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /link zepto/i })).toBeInTheDocument(),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /link zepto/i }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/isn't accepting/i)
+    expect(alert).not.toHaveTextContent(/please try again/i)
+  })
+
+  it('falls back to the generic message when the failure is not a 502', async () => {
+    getLinkStatus.mockResolvedValue(NOT_LINKED)
+    startLink.mockRejectedValue(new TypeError('network down'))
+
+    renderSettings()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /link swiggy/i })).toBeInTheDocument(),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /link swiggy/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /couldn't start linking swiggy\. please try again\./i,
+    )
+  })
+
+  it('re-enables the Link button after a failure so the user is not stuck', async () => {
+    getLinkStatus.mockResolvedValue(NOT_LINKED)
+    startLink.mockRejectedValue(new ApiError('nope', 502))
+
+    renderSettings()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /link zepto/i })).toBeInTheDocument(),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /link zepto/i }))
+
+    await screen.findByRole('alert')
+    expect(screen.getByRole('button', { name: /link zepto/i })).toBeEnabled()
+  })
+
   it('clicking "Unlink" deletes the link and updates the UI without a full reload', async () => {
     getLinkStatus.mockResolvedValue(SWIGGY_LINKED)
     unlink.mockResolvedValue(undefined)

@@ -48,6 +48,21 @@ export async function apiFetch(path: string, opts: RequestInit = {}): Promise<Re
   return response
 }
 
+/**
+ * FastAPI puts human-readable failure text in `detail`. The link routes use it
+ * to explain *why* linking could not start — "retrying won't help" reads very
+ * differently from "try again" — so prefer it over a generic message whenever
+ * the body actually has that shape.
+ */
+async function detailOr(response: Response, fallback: string): Promise<string> {
+  try {
+    const body = await response.json()
+    return typeof body?.detail === 'string' && body.detail.trim() ? body.detail : fallback
+  } catch {
+    return fallback
+  }
+}
+
 export type LinkPlatform = 'swiggy' | 'zepto'
 
 export interface LinkStatus {
@@ -69,7 +84,7 @@ export async function getLinkStatus(): Promise<LinkStatus[]> {
 export async function startLink(platform: LinkPlatform): Promise<{ authorization_url: string }> {
   const response = await apiFetch(`/links/${platform}/start`, { method: 'POST' })
   if (!response.ok) {
-    throw new ApiError('Failed to start link', response.status)
+    throw new ApiError(await detailOr(response, 'Failed to start link'), response.status)
   }
   return response.json()
 }

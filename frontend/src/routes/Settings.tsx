@@ -127,8 +127,15 @@ export default function Settings() {
     try {
       const { authorization_url } = await startLink(platform)
       window.location.href = authorization_url
-    } catch {
-      setToast({ kind: 'error', text: `Couldn't start linking ${platformLabel(platform)}. Please try again.` })
+    } catch (error) {
+      // A 502 carries the backend's own explanation of why the platform
+      // refused. Showing it beats "please try again", which is actively
+      // misleading when the answer is that retrying cannot work.
+      const text =
+        error instanceof ApiError && error.status === 502
+          ? error.message
+          : `Couldn't start linking ${platformLabel(platform)}. Please try again.`
+      setToast({ kind: 'error', text })
       setPending(null)
     }
   }
