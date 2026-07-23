@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     token_encryption_key: str | None = None
     backend_base_url: str | None = None
     frontend_settings_url: str | None = None
+    resend_api_key: str | None = None
+    digest_from_email: str | None = None
 
 
 @lru_cache

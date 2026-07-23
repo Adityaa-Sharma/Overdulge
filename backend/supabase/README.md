@@ -105,8 +105,11 @@ for the full rationale:
 
 - `service_role_client()` — sends `apikey` and `Authorization: Bearer` both
   set to `SUPABASE_SERVICE_ROLE_KEY`. Bypasses RLS entirely. Import only
-  from `sync/` and `oauth/`; every call site must scope its own queries with
-  an explicit `user_id` filter since the database will not do it.
+  from `sync/`, `oauth/`, and `digest/` (ADR-0007 §3 extends ADR-0002's
+  confinement list to cover the weekly digest cron, which — like `sync/`
+  and `oauth/` — has no browser-present user JWT to forward); every call
+  site must scope its own queries with an explicit `user_id` filter since
+  the database will not do it.
 - `user_client(jwt)` — sends `apikey: <anon key>` and `Authorization: Bearer
   <the caller's Supabase JWT>`, forwarded from the incoming request. RLS
   policies are the enforcement layer here; every `api/*` route handler uses
