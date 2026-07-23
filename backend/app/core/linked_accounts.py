@@ -53,16 +53,25 @@ def delete_linked_account(client: PostgrestClient, *, user_id: str, platform: st
     )
 
 
+def _account_filter(user_id: str, platform: str) -> dict[str, str]:
+    return {"user_id": f"eq.{user_id}", "platform": f"eq.{platform}"}
+
+
 def set_tokens(
     client: PostgrestClient, *, user_id: str, platform: str, tokens_encrypted: str
 ) -> dict[str, Any]:
     """Updates only `tokens_encrypted` (e.g. after `oauth/engine.py`'s
-    `refresh_tokens`). Only `user_id`/`platform`/`tokens_encrypted` are sent,
-    so PostgREST's `merge-duplicates` resolution leaves `sync_state` and
-    `last_sync_at` untouched — callers never need to read those back first.
+    `refresh_tokens`), leaving `sync_state`/`last_sync_at` untouched.
+
+    A PATCH, not an upsert: the row always already exists (you cannot refresh
+    a token for an account that was never linked), and an upsert omitting the
+    NOT NULL columns would fail 23502 against the real database.
     """
-    row = {"user_id": user_id, "platform": platform, "tokens_encrypted": tokens_encrypted}
-    rows = client.upsert("linked_accounts", row, on_conflict="user_id,platform")
+    rows = client.update(
+        "linked_accounts",
+        {"tokens_encrypted": tokens_encrypted},
+        filters=_account_filter(user_id, platform),
+    )
     return rows[0]
 
 
@@ -87,8 +96,11 @@ def set_sync_status(
         "syncing_since": syncing_since,
         "last_error": last_error,
     }
-    row = {"user_id": user_id, "platform": platform, "sync_state": updated_sync_state}
-    rows = client.upsert("linked_accounts", row, on_conflict="user_id,platform")
+    rows = client.update(
+        "linked_accounts",
+        {"sync_state": updated_sync_state},
+        filters=_account_filter(user_id, platform),
+    )
     return rows[0]
 
 
@@ -114,13 +126,11 @@ def record_sync_result(
         "last_error": None,
         "orders_captured_last_run": orders_captured,
     }
-    row = {
-        "user_id": user_id,
-        "platform": platform,
-        "last_sync_at": synced_at,
-        "sync_state": updated_sync_state,
-    }
-    rows = client.upsert("linked_accounts", row, on_conflict="user_id,platform")
+    rows = client.update(
+        "linked_accounts",
+        {"last_sync_at": synced_at, "sync_state": updated_sync_state},
+        filters=_account_filter(user_id, platform),
+    )
     return rows[0]
 
 

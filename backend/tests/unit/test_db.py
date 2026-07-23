@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 
@@ -104,6 +106,22 @@ def test_upsert_sends_on_conflict_and_merge_preference():
     assert request.method == "POST"
     assert request.url.params["on_conflict"] == "id"
     assert request.headers["Prefer"] == "resolution=merge-duplicates,return=representation"
+
+
+def test_update_sends_patch_with_filters_and_no_on_conflict():
+    captured: list[httpx.Request] = []
+    client = db.service_role_client(transport=_capturing_transport(captured))
+
+    client.update("linked_accounts", {"sync_state": {"status": "idle"}}, filters={"id": "eq.1"})
+
+    request = captured[0]
+    # A PATCH, not a POST/upsert: the row exists and some NOT NULL columns are
+    # deliberately not in the payload, which an upsert cannot express.
+    assert request.method == "PATCH"
+    assert "on_conflict" not in request.url.params
+    assert request.url.params["id"] == "eq.1"
+    assert request.headers["Prefer"] == "return=representation"
+    assert json.loads(request.content) == {"sync_state": {"status": "idle"}}
 
 
 def test_delete_sends_filters_and_representation_preference():

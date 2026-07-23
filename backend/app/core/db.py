@@ -76,6 +76,31 @@ class PostgrestClient:
         _raise_for_status(response)
         return response.json()
 
+    def update(
+        self,
+        table: str,
+        values: dict[str, Any],
+        *,
+        filters: dict[str, str],
+    ) -> list[dict[str, Any]]:
+        """Partial UPDATE (PostgREST PATCH) of the rows matching `filters`.
+
+        Distinct from `upsert`: an upsert is `INSERT ... ON CONFLICT`, and
+        Postgres validates NOT NULL against the *would-be-inserted* row before
+        the conflict is resolved — so an upsert that omits a NOT NULL column
+        fails 23502 even when the row already exists. For "modify an existing
+        row", PATCH is the only correct verb.
+        """
+        response = self._client.request(
+            "PATCH",
+            f"/{table}",
+            params=filters,
+            json=values,
+            headers={"Prefer": "return=representation"},
+        )
+        _raise_for_status(response)
+        return response.json()
+
     def delete(self, table: str, *, filters: dict[str, str]) -> list[dict[str, Any]]:
         response = self._client.request(
             "DELETE",
