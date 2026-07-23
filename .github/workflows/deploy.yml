@@ -13,22 +13,63 @@ concurrency:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    env:
+      REGION: us-central1
+      SERVICE: overdulge-backend
+      REPO: overdulge
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Deploy Worker (if present)
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Skip if no backend Dockerfile
+        id: check
         run: |
-          if [ -d backend ]; then
-            pip install uv && uv tool install workers-py
-            cd backend && pywrangler deploy
-          else
-            echo "backend/ not present yet - skipping"
-          fi
+          if [ -f backend/Dockerfile ]; then echo "go=true" >> "$GITHUB_OUTPUT"
+          else echo "go=false" >> "$GITHUB_OUTPUT"; echo "backend/ not deployable yet - skipping"; fi
+      - id: auth
+        if: steps.check.outputs.go == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - if: steps.check.outputs.go == 'true'
+        uses: google-github-actions/setup-gcloud@v2
+      - name: Build, push, and deploy to Cloud Run
+        if: steps.check.outputs.go == 'true'
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$REPO/$SERVICE"
+
+          # Artifact Registry repo (create once; ignore if it already exists).
+          gcloud artifacts repositories describe "$REPO" --location "$REGION" >/dev/null 2>&1 \
+            || gcloud artifacts repositories create "$REPO" \
+                 --repository-format=docker --location "$REGION" \
+                 --description="Overdulge backend images"
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+
+          docker build -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" backend
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+
+          # Runtime config. All values are Optional in config.py, so a missing
+          # secret degrades a feature rather than failing startup. Custom '@'
+          # delimiter so values containing commas/slashes are safe.
+          gcloud run deploy "$SERVICE" \
+            --image "$IMAGE:${{ github.sha }}" \
+            --region "$REGION" --platform managed --allow-unauthenticated \
+            --port 8080 --cpu 1 --memory 512Mi --min-instances 0 --max-instances 3 \
+            --set-env-vars "^@@^SUPABASE_URL=${{ secrets.SUPABASE_URL }}@@SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}@@SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}@@TOKEN_ENCRYPTION_KEY=${{ secrets.TOKEN_ENCRYPTION_KEY }}@@GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}@@FRONTEND_SETTINGS_URL=https://adityaa-sharma.github.io/Overdulge/"
+
+          URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
+          echo "Deployed: $URL"
+          echo "Health:"; curl -fsS "$URL/api/v1/health" && echo " OK" || echo " (health check non-200)"
+
+          # Keep Artifact Registry under the 0.5 GB free tier: delete all but the
+          # 5 newest image versions.
+          OLD=$(gcloud artifacts docker images list "$IMAGE" --sort-by=~UPDATE_TIME \
+                  --format='value(version)' 2>/dev/null | tail -n +6 || true)
+          for v in $OLD; do
+            gcloud artifacts docker images delete "$IMAGE@$v" --quiet --delete-tags >/dev/null 2>&1 || true
+          done
   frontend:
     runs-on: ubuntu-latest
     environment:

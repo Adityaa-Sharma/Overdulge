@@ -1,15 +1,37 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Settings from '../../src/routes/Settings'
 
-const { getLinkStatus, startLink, unlink } = vi.hoisted(() => ({
-  getLinkStatus: vi.fn(),
-  startLink: vi.fn(),
-  unlink: vi.fn(),
-}))
+const { getLinkStatus, startLink, unlink, getSyncStatus, triggerSync, ApiError } = vi.hoisted(
+  () => {
+    class ApiError extends Error {
+      status: number
+      constructor(message: string, status: number) {
+        super(message)
+        this.name = 'ApiError'
+        this.status = status
+      }
+    }
+    return {
+      getLinkStatus: vi.fn(),
+      startLink: vi.fn(),
+      unlink: vi.fn(),
+      getSyncStatus: vi.fn(),
+      triggerSync: vi.fn(),
+      ApiError,
+    }
+  },
+)
 
-vi.mock('../../src/lib/api', () => ({ getLinkStatus, startLink, unlink }))
+vi.mock('../../src/lib/api', () => ({
+  getLinkStatus,
+  startLink,
+  unlink,
+  getSyncStatus,
+  triggerSync,
+  ApiError,
+}))
 
 const NOT_LINKED = [
   { platform: 'swiggy', linked: false, linked_at: null },
@@ -29,8 +51,26 @@ function renderSettings(initialEntry = '/settings') {
   )
 }
 
+const SYNC_EMPTY: never[] = []
+
+const SYNC_LINKED = [
+  {
+    platform: 'swiggy_food',
+    last_sync_at: '2026-07-20T09:00:00Z',
+    orders_captured_last_run: 4,
+    warning: null,
+  },
+  {
+    platform: 'swiggy_instamart',
+    last_sync_at: null,
+    orders_captured_last_run: null,
+    warning: "Instamart's order history is only available for roughly the last 15 days.",
+  },
+]
+
 beforeEach(() => {
   vi.resetAllMocks()
+  getSyncStatus.mockResolvedValue(SYNC_EMPTY)
   Object.defineProperty(window, 'location', {
     value: { href: '' },
     writable: true,
@@ -126,5 +166,90 @@ describe('Settings', () => {
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent(/couldn't link zepto/i),
     )
+  })
+})
+
+describe('Sync status', () => {
+  it('shows an empty state when no platform has ever been linked', async () => {
+    getLinkStatus.mockResolvedValue(NOT_LINKED)
+    getSyncStatus.mockResolvedValue(SYNC_EMPTY)
+
+    renderSettings()
+
+    await waitFor(() =>
+      expect(screen.getByText(/link an account above to start syncing/i)).toBeInTheDocument(),
+    )
+  })
+
+  it('renders last sync time, orders captured, and the Instamart warning only for that platform', async () => {
+    getLinkStatus.mockResolvedValue(NOT_LINKED)
+    getSyncStatus.mockResolvedValue(SYNC_LINKED)
+
+    renderSettings()
+
+    await waitFor(() => expect(screen.getByText(/4 orders captured/i)).toBeInTheDocument())
+    expect(screen.getByText(/never synced/i)).toBeInTheDocument()
+    expect(screen.getByText(/15 days/i)).toBeInTheDocument()
+    const foodItem = screen.getByText('Swiggy Food').closest('li')!
+    expect(within(foodItem).queryByText(/15 days/i)).not.toBeInTheDocument()
+  })
+
+  it('disables "Sync now" immediately on click and re-enables once the call resolves', async () => {
+    getLinkStatus.mockResolvedValue(NOT_LINKED)
+    getSyncStatus.mockResolvedValue(SYNC_LINKED)
+    let resolveTrigger: () => void = () => {}
+    triggerSync.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveTrigger = resolve
+      }),
+    )
+
+    renderSettings()
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: /^sync now$/i })).toHaveLength(2),
+    )
+
+    const [syncButton] = screen.getAllByRole('button', { name: /^sync now$/i })
+    fireEvent.click(syncButton)
+
+    expect(syncButton).toBeDisabled()
+
+    resolveTrigger()
+    await waitFor(() => expect(syncButton).not.toBeDisabled())
+  })
+
+  it('shows a non-error "already syncing" state on a 409, not a failure toast', async () => {
+    getLinkStatus.mockResolvedValue(NOT_LINKED)
+    getSyncStatus.mockResolvedValue(SYNC_LINKED)
+    triggerSync.mockRejectedValue(new ApiError('Sync already in progress', 409))
+
+    renderSettings()
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: /^sync now$/i })).toHaveLength(2),
+    )
+
+    const [syncButton] = screen.getAllByRole('button', { name: /^sync now$/i })
+    fireEvent.click(syncButton)
+
+    await waitFor(() => expect(screen.getByText(/already in progress/i)).toBeInTheDocument())
+    expect(screen.queryByRole('alert', { name: /couldn't sync/i })).not.toBeInTheDocument()
+    expect(screen.getByText(/already in progress/i)).toHaveAttribute('role', 'status')
+  })
+
+  it('shows a failure state and re-enables the button on a non-409 error', async () => {
+    getLinkStatus.mockResolvedValue(NOT_LINKED)
+    getSyncStatus.mockResolvedValue(SYNC_LINKED)
+    triggerSync.mockRejectedValue(new ApiError('boom', 500))
+
+    renderSettings()
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: /^sync now$/i })).toHaveLength(2),
+    )
+
+    const [syncButton] = screen.getAllByRole('button', { name: /^sync now$/i })
+    fireEvent.click(syncButton)
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/couldn't sync/i))
+    expect(syncButton).not.toBeDisabled()
   })
 })

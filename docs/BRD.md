@@ -46,8 +46,10 @@ These are engineering law. Every sync-related task inherits them as acceptance c
 ## 3. Architecture constraints (fixed)
 
 - Frontend: React, static build, deployed to GitHub Pages.
-- Backend: **Python** on Cloudflare Workers (Python Workers, `pywrangler`
-  workflow), FastAPI for routing.
+- Backend: **Python FastAPI** on **Google Cloud Run** (containerised, standard
+  uvicorn ASGI server; `backend/Dockerfile` is the build). Deployed from CI via
+  `gcloud run deploy` to region `us-central1` (Always-Free tier). No Pyodide /
+  Workers size or packaging constraints apply — it is a normal Python process.
 - LLM: LangChain `init_chat_model`, provider-agnostic. Current provider is
   **Groq**, initialised as `init_chat_model("groq:<model>")` with the model name
   read from config, not hardcoded. Worker secret: `GROQ_API_KEY`.
@@ -61,7 +63,9 @@ These are engineering law. Every sync-related task inherits them as acceptance c
   the Claude subscription) and is entirely unrelated to the product's provider.
 - Database: Supabase (Postgres). Backend talks to Supabase over its REST API
   (PostgREST) — do not assume `supabase-py` works under Pyodide.
-- Sync: Cloudflare Cron Triggers on the Worker, daily minimum.
+- Sync: a scheduled GitHub Actions workflow hits the backend's sync endpoint
+  (daily minimum). Cloud Run has no built-in cron; use Actions cron or Cloud
+  Scheduler.
 - Platform access: backend is an MCP client (JSON-RPC over HTTP via Worker
   fetch). Per-user tokens encrypted at rest in Supabase.
 - Secrets: only via Worker secrets / GitHub Actions secrets. Never in code.
@@ -149,7 +153,7 @@ budgets(id, user_id, month, category NULL, cap_paise)
 - NFR-2 Privacy: friends-beta still means real personal data. RLS on all user
   tables; tokens encrypted; no order data in logs; probe-style personal dumps
   never committed.
-- NFR-3 Free-tier fit: Workers free tier, Supabase free tier, GitHub Pages.
+- NFR-3 Free-tier fit: Cloud Run Always-Free tier, Supabase free tier, GitHub Pages.
 - NFR-4 All LLM outputs that state numbers must be computed from the database,
   not model recall.
 
