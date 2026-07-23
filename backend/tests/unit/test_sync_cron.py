@@ -15,6 +15,9 @@ _FUTURE = "2099-01-01T00:00:00+00:00"
 _PAST = "2020-01-01T00:00:00+00:00"
 
 _OAUTH_METADATA = {
+    # These fixtures sync the "zepto" platform, so the document has to claim
+    # Zepto's issuer — the engine discards metadata that names a different one.
+    "issuer": "https://auth.zepto.co.in",
     "authorization_endpoint": "https://auth.example.com/authorize",
     "token_endpoint": "https://auth.example.com/oauth/token",
     "registration_endpoint": "https://auth.example.com/oauth/register",

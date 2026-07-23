@@ -23,6 +23,9 @@ TEST_CONFIG = PlatformConfig(
 )
 
 _METADATA = {
+    # Must equal TEST_CONFIG.issuer: the engine rejects a metadata document
+    # that claims a different issuer (RFC 8414 §3.3, mix-up defence).
+    "issuer": "https://auth.example.com/oauth",
     "authorization_endpoint": "https://auth.example.com/oauth/authorize",
     "token_endpoint": "https://auth.example.com/oauth/token",
     "registration_endpoint": "https://auth.example.com/oauth/register",
@@ -282,7 +285,9 @@ def test_callback_with_metadata_discovery_failure_returns_false_and_clears_pendi
     fake_postgrest,
 ):
     def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/.well-known/oauth-authorization-server/oauth":
+        # Every discovery candidate is down, not just the first — the engine
+        # tries several URLs before giving up.
+        if ".well-known" in request.url.path:
             return httpx.Response(503, text="service unavailable")
         raise AssertionError(request.url.path)
 
@@ -340,3 +345,177 @@ def test_refresh_tokens_raises_on_token_endpoint_error(fake_postgrest):
         engine.refresh_tokens(
             TEST_CONFIG, refresh_token="rt-old", transport=httpx.MockTransport(handler)
         )
+
+
+# --- metadata discovery -----------------------------------------------------
+#
+# Swiggy serves its authorization-server metadata at the *host root* and
+# answers the RFC 8414 §3.1 path-inserted URL with a 401. Discovery therefore
+# has to try more than one candidate — which is only safe because the `issuer`
+# in the document is verified before it is trusted.
+
+
+def _discovery_only(responses: dict[str, httpx.Response]):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path in responses:
+            return responses[request.url.path]
+        return httpx.Response(404, text="not found")
+
+    return httpx.MockTransport(handler)
+
+
+def test_discovery_falls_back_to_host_root_when_the_path_inserted_url_is_rejected():
+    """The exact Swiggy failure: linking 500'd because discovery gave up after
+    the first candidate returned 401.
+    """
+    transport = _discovery_only(
+        {
+            "/.well-known/oauth-authorization-server/oauth": httpx.Response(
+                401, json={"error": "invalid_token"}
+            ),
+            "/.well-known/oauth-authorization-server": httpx.Response(200, json=_METADATA),
+        }
+    )
+
+    with httpx.Client(transport=transport) as http:
+        assert engine._fetch_metadata(http, TEST_CONFIG) == _METADATA
+
+
+def test_discovery_prefers_the_spec_mandated_url_over_the_fallback():
+    """RFC 8414 §3.1 stays first; the fallbacks exist for servers that don't
+    implement it, not to override one that does.
+    """
+    spec_document = {**_METADATA, "token_endpoint": "https://auth.example.com/oauth/spec-token"}
+    transport = _discovery_only(
+        {
+            "/.well-known/oauth-authorization-server/oauth": httpx.Response(
+                200, json=spec_document
+            ),
+            "/.well-known/oauth-authorization-server": httpx.Response(200, json=_METADATA),
+        }
+    )
+
+    with httpx.Client(transport=transport) as http:
+        metadata = engine._fetch_metadata(http, TEST_CONFIG)
+
+    assert metadata["token_endpoint"] == "https://auth.example.com/oauth/spec-token"
+
+
+def test_discovery_rejects_metadata_claiming_a_different_issuer():
+    """Without this the root-URL fallback could bind us to an unrelated
+    authorization server that happens to share the host — the mix-up attack
+    RFC 8414 §3.3 exists to prevent.
+    """
+    impostor = {**_METADATA, "issuer": "https://attacker.example.com"}
+    transport = _discovery_only(
+        {
+            "/.well-known/oauth-authorization-server/oauth": httpx.Response(404, text=""),
+            "/.well-known/oauth-authorization-server": httpx.Response(200, json=impostor),
+        }
+    )
+
+    with httpx.Client(transport=transport) as http:
+        with pytest.raises(engine.OAuthError):
+            engine._fetch_metadata(http, TEST_CONFIG)
+
+
+def test_discovery_survives_a_candidate_that_returns_html():
+    """A 200 with an error page is a real deployment behaviour; `.json()` on it
+    would raise a ValueError that no caller is catching.
+    """
+    transport = _discovery_only(
+        {
+            "/.well-known/oauth-authorization-server/oauth": httpx.Response(
+                200, text="<html>nope</html>"
+            ),
+            "/.well-known/oauth-authorization-server": httpx.Response(200, json=_METADATA),
+        }
+    )
+
+    with httpx.Client(transport=transport) as http:
+        assert engine._fetch_metadata(http, TEST_CONFIG) == _METADATA
+
+
+def test_discovery_error_names_every_candidate_it_tried():
+    transport = _discovery_only({})
+
+    with httpx.Client(transport=transport) as http:
+        with pytest.raises(engine.OAuthError) as excinfo:
+            engine._fetch_metadata(http, TEST_CONFIG)
+
+    assert "404" in str(excinfo.value)
+
+
+def test_discovery_candidates_are_deduplicated_for_a_path_less_issuer():
+    urls = engine._discovery_urls("https://auth.zepto.co.in")
+
+    assert len(urls) == len(set(urls))
+    assert urls[0] == "https://auth.zepto.co.in/.well-known/oauth-authorization-server"
+
+
+# --- registration failures --------------------------------------------------
+
+
+def _registering_server(registration_response: httpx.Response):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/.well-known/oauth-authorization-server/oauth":
+            return httpx.Response(200, json=_METADATA)
+        if request.url.path == "/oauth/register":
+            return registration_response
+        raise AssertionError(request.url.path)
+
+    return httpx.MockTransport(handler)
+
+
+def test_rejected_registration_is_permanent_and_names_the_reason(fake_postgrest):
+    """Zepto answers exactly this way: our callback domain is not on its
+    allowlist. Retrying sends the identical payload and gets the identical 400.
+    """
+    transport = _registering_server(
+        httpx.Response(400, json={"error": "invalid_redirect_uri", "message": "not allowed"})
+    )
+
+    with pytest.raises(engine.OAuthError) as excinfo:
+        engine.start_link(TEST_CONFIG, user_id="user-1", transport=transport)
+
+    assert excinfo.value.permanent is True
+    assert "invalid_redirect_uri" in str(excinfo.value)
+
+
+def test_registration_server_error_is_treated_as_retryable(fake_postgrest):
+    transport = _registering_server(httpx.Response(503, text="upstream down"))
+
+    with pytest.raises(engine.OAuthError) as excinfo:
+        engine.start_link(TEST_CONFIG, user_id="user-1", transport=transport)
+
+    assert excinfo.value.permanent is False
+
+
+def test_registration_error_code_is_clamped_before_it_reaches_a_log(fake_postgrest):
+    """The code is copied into `failure_reason`, so a server that puts prose
+    (or a newline-injected forgery) in `error` must not get it into our logs.
+    """
+    transport = _registering_server(
+        httpx.Response(400, json={"error": "bad\nINFO fake log line " + "x" * 500})
+    )
+
+    with pytest.raises(engine.OAuthError) as excinfo:
+        engine.start_link(TEST_CONFIG, user_id="user-1", transport=transport)
+
+    message = str(excinfo.value)
+    assert "\n" not in message
+    assert len(message) < 200
+
+
+def test_missing_backend_base_url_is_reported_as_permanent(fake_postgrest, monkeypatch):
+    """The production root cause: BACKEND_BASE_URL was never set on Cloud Run,
+    so every link start raised here and surfaced as an opaque 500.
+    """
+    monkeypatch.setattr(engine, "get_settings", lambda: Settings(token_encryption_key=_TEST_KEY))
+    transport = _registering_server(httpx.Response(201, json={"client_id": "cid-1"}))
+
+    with pytest.raises(engine.OAuthError) as excinfo:
+        engine.start_link(TEST_CONFIG, user_id="user-1", transport=transport)
+
+    assert excinfo.value.permanent is True
+    assert "BACKEND_BASE_URL" in str(excinfo.value)

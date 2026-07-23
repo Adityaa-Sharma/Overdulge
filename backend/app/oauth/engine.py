@@ -27,10 +27,21 @@ from app.core.config import get_settings
 
 _PENDING_LINK_TTL = timedelta(minutes=10)
 _STATE_BYTES = 32  # 256 bits, per ADR-0001 ("state must be unguessable")
+_MAX_ERROR_CODE_LENGTH = 64
 
 
 class OAuthError(RuntimeError):
-    """A flow step (metadata discovery, DCR, or token exchange) failed."""
+    """A flow step (metadata discovery, DCR, or token exchange) failed.
+
+    `permanent` distinguishes "this will fail identically next time" (our
+    request or our configuration is wrong — a rejected registration, a missing
+    BACKEND_BASE_URL) from "the platform was unreachable or broken just now".
+    Callers use it to decide whether telling the user to retry is honest.
+    """
+
+    def __init__(self, message: str, *, permanent: bool = False) -> None:
+        super().__init__(message)
+        self.permanent = permanent
 
 
 @dataclass(frozen=True)
@@ -88,7 +99,7 @@ def start_link(
 
     authorization_endpoint = metadata.get("authorization_endpoint")
     if not authorization_endpoint:
-        raise OAuthError("platform metadata is missing authorization_endpoint")
+        raise OAuthError("platform metadata is missing authorization_endpoint", permanent=True)
 
     params = {
         "response_type": "code",
@@ -230,23 +241,68 @@ def encode_tokens(token_set: TokenSet) -> str:
 def _redirect_uri(platform: str) -> str:
     settings = get_settings()
     if not settings.backend_base_url:
-        raise OAuthError("BACKEND_BASE_URL is not configured")
+        raise OAuthError("BACKEND_BASE_URL is not configured", permanent=True)
     return f"{settings.backend_base_url.rstrip('/')}/api/v1/links/{platform}/callback"
 
 
-def _discovery_url(issuer: str) -> str:
-    """RFC 8414 §3.1 well-known construction for an issuer with a path."""
+def _discovery_urls(issuer: str) -> list[str]:
+    """Candidate metadata URLs for `issuer`, in the order they should be tried.
+
+    RFC 8414 §3.1 inserts the well-known segment *before* the issuer's path
+    (`https://h/.well-known/oauth-authorization-server/auth`), and that stays
+    first because it is what the spec mandates. Real deployments are not
+    uniform, though — Swiggy serves its document at the host root and rejects
+    the path-inserted URL with a 401 — so the OIDC path-append form and the
+    bare host-root form follow as fallbacks.
+
+    Trying several URLs is only safe because `_fetch_metadata` verifies the
+    `issuer` inside whichever document comes back (see there).
+    """
     parsed = urlsplit(issuer)
     suffix = parsed.path.rstrip("/")
-    path = f"/.well-known/oauth-authorization-server{suffix}"
-    return urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
+    paths = [
+        f"/.well-known/oauth-authorization-server{suffix}",
+        f"{suffix}/.well-known/openid-configuration",
+        "/.well-known/oauth-authorization-server",
+    ]
+    urls = [urlunsplit((parsed.scheme, parsed.netloc, path, "", "")) for path in paths]
+    # An issuer with no path collapses candidates 1 and 3 into the same URL.
+    return list(dict.fromkeys(urls))
 
 
 def _fetch_metadata(http: httpx.Client, config: PlatformConfig) -> dict[str, Any]:
-    response = http.get(_discovery_url(config.issuer))
-    if response.status_code >= 400:
-        raise OAuthError(f"authorization-server metadata discovery failed ({response.status_code})")
-    return response.json()
+    """First candidate URL that yields metadata genuinely belonging to `issuer`.
+
+    The `issuer` check is not a formality: it is RFC 8414 §3.3, and it is what
+    makes the fallback chain safe. Without it, falling back to the host root
+    could bind us to a *different* authorization server that happens to live on
+    the same host — the classic mix-up attack. A document whose `issuer` does
+    not match is treated as no answer at all, and the next candidate is tried.
+    """
+    attempts: list[str] = []
+    for url in _discovery_urls(config.issuer):
+        try:
+            response = http.get(url)
+        except httpx.HTTPError as exc:
+            attempts.append(f"{url} -> {type(exc).__name__}")
+            continue
+        if response.status_code >= 400:
+            attempts.append(f"{url} -> {response.status_code}")
+            continue
+        try:
+            metadata = response.json()
+        except ValueError:
+            attempts.append(f"{url} -> non-JSON body")
+            continue
+        if not isinstance(metadata, dict) or metadata.get("issuer") != config.issuer:
+            attempts.append(f"{url} -> issuer mismatch")
+            continue
+        return metadata
+
+    raise OAuthError(
+        f"authorization-server metadata discovery failed for {config.issuer} "
+        f"({'; '.join(attempts)})"
+    )
 
 
 def _generate_pkce_pair() -> tuple[str, str]:
@@ -261,6 +317,18 @@ def _generate_state() -> str:
 
 def _b64url(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def _sanitize_error_code(value: Any) -> str:
+    """Reduce an upstream error field to a short, log-safe token.
+
+    RFC 6749 §5.2 / RFC 7591 §3.2.2 error codes are ASCII identifiers like
+    `invalid_redirect_uri`. A server is free to put anything there, though, and
+    this value ends up in `failure_reason` — so it is clamped to that shape
+    rather than trusted, keeping arbitrary third-party text out of our logs.
+    """
+    text = str(value)[:_MAX_ERROR_CODE_LENGTH]
+    return "".join(char for char in text if char.isascii() and (char.isalnum() or char in "_-"))
 
 
 def _is_expired(expires_at: str | None) -> bool:
@@ -290,7 +358,7 @@ def _get_or_register_client(
 
     registration_endpoint = metadata.get("registration_endpoint")
     if not registration_endpoint:
-        raise OAuthError("platform metadata is missing registration_endpoint")
+        raise OAuthError("platform metadata is missing registration_endpoint", permanent=True)
 
     payload: dict[str, Any] = {
         "client_name": "Overdulge",
@@ -304,7 +372,25 @@ def _get_or_register_client(
 
     response = http.post(registration_endpoint, json=payload)
     if response.status_code >= 400:
-        raise OAuthError(f"dynamic client registration failed ({response.status_code})")
+        # Surface the RFC 7591 §3.2.2 error code when the server sends one.
+        # Registration errors are configuration problems on our side far more
+        # often than transient faults — `invalid_redirect_uri`, for instance,
+        # means the platform has not allowlisted our callback domain, which no
+        # amount of retrying will fix. The code is the difference between a
+        # diagnosable failure and a blind 500.
+        detail = ""
+        try:
+            body = response.json()
+        except ValueError:
+            body = None
+        if isinstance(body, dict) and body.get("error"):
+            detail = f": {_sanitize_error_code(body['error'])}"
+        raise OAuthError(
+            f"dynamic client registration failed ({response.status_code}{detail})",
+            # A 4xx rejects the payload we sent; resending it verbatim gets the
+            # same answer. A 5xx is the platform's own fault and may pass later.
+            permanent=response.status_code < 500,
+        )
 
     registration = response.json()
     client_id = registration["client_id"]

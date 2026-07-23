@@ -22,6 +22,9 @@ from app.oauth.platforms import zepto
 _TEST_KEY = base64.b64encode(b"0" * 32).decode("ascii")
 
 _METADATA = {
+    # Must match zepto.CONFIG.issuer — the engine rejects a metadata document
+    # that claims a different issuer (RFC 8414 §3.3).
+    "issuer": "https://auth.zepto.co.in",
     "authorization_endpoint": "https://auth.zepto.co.in/authorize",
     "token_endpoint": "https://auth.zepto.co.in/token",
     "registration_endpoint": "https://auth.zepto.co.in/register",
