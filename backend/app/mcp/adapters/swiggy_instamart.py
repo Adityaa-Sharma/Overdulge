@@ -6,9 +6,10 @@ never appears anywhere in this file; this is a structural guarantee (one
 constant, one call site), not just a convention, per ADR-0005 §2.
 
 Instamart returns plain rupee numbers (BRD §2.5) and an already-UTC
-ISO-8601 timestamp (BRD §2.6, no detail call needed). `grand_total_paise` is
-converted from `grandTotal` verbatim — no arithmetic on it, or on any other
-`*_paise` field, anywhere in this file (BRD §2.8).
+ISO-8601 timestamp in `createdAt` (BRD §2.6, no detail call needed).
+`grand_total_paise` is converted from the order's `totalAmount` verbatim, and
+the item/fee breakdown from `billDetails` — no arithmetic on any `*_paise`
+field anywhere in this file (BRD §2.8).
 """
 
 from __future__ import annotations
@@ -45,14 +46,17 @@ def _parse_timestamp(value: str) -> datetime:
 
 def _normalize_order(order: dict[str, Any]) -> NormalizedOrder:
     status = order["status"]
-    item_total = order.get("itemTotal")
-    fees = order.get("deliveryFee")
+    # The money breakdown lives under `billDetails`; the order timestamp is
+    # `createdAt` (UTC, with a Z). Confirmed against the live API.
+    bill = order.get("billDetails") or {}
+    item_total = bill.get("itemTotal")
+    fees = bill.get("deliveryFee")
     return NormalizedOrder(
         platform_order_id=str(order["orderId"]),
         status=status,
         is_cancelled=status.upper() in _CANCELLED_STATUSES,
-        ordered_at=_parse_timestamp(order["orderTime"]),
-        grand_total_paise=_rupees_to_paise(order["grandTotal"]),
+        ordered_at=_parse_timestamp(order["createdAt"]),
+        grand_total_paise=_rupees_to_paise(order["totalAmount"]),
         raw=order,
         vendor_name=order.get("storeName"),
         address_id=None,

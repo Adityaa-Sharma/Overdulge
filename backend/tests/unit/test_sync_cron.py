@@ -187,20 +187,23 @@ def _oauth_and_mcp_transport(mcp_responses: dict[str, dict], *, token_calls: lis
     return httpx.MockTransport(handler), token_calls
 
 
+# These mirror the live API shapes (confirmed against the real MCP servers):
+# addresses keyed by `id`, food totals in `orderTotal`, food detail nested under
+# `order` with `orderedTime`, Instamart in `createdAt`/`totalAmount`/billDetails.
 _FOOD_RESPONSES = {
-    "get_addresses": {"addresses": [{"addressId": "addr1"}]},
+    "get_addresses": {"addresses": [{"id": "addr1"}]},
     "get_food_orders": {
         "orders": [
             {
                 "orderId": "f1",
-                "orderStatus": "DELIVERED",
-                "orderTime": "February 1, 1:00 PM",
-                "grandTotal": "₹100",
+                "orderStatus": "Delivered",
+                "orderedTime": "February 1, 1:00 PM",
+                "orderTotal": "₹100",
                 "restaurantName": "R1",
             }
         ]
     },
-    "get_food_order_details": {"orderId": "f1", "orderTime": "2026-02-01T13:00:00+05:30"},
+    "get_food_order_details": {"order": {"orderId": "f1", "orderedTime": "2026-02-01 13:00:00"}},
 }
 
 _INSTAMART_RESPONSES = {
@@ -209,9 +212,10 @@ _INSTAMART_RESPONSES = {
             {
                 "orderId": "i1",
                 "status": "DELIVERED",
-                "orderTime": "2026-02-01T08:00:00Z",
-                "grandTotal": 50,
+                "createdAt": "2026-02-01T08:00:00Z",
+                "totalAmount": 50,
                 "storeName": "S1",
+                "billDetails": {"itemTotal": 45, "deliveryFee": 5, "grandTotal": 50},
             }
         ]
     }

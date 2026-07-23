@@ -104,6 +104,83 @@ def test_call_tool_raises_typed_error_on_json_rpc_error_delivered_as_sse():
     assert excinfo.value.code == -32601
 
 
+def test_call_tool_unwraps_structured_content_envelope():
+    # A spec tools/call result wraps the payload; the adapter wants the payload.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {
+                    "content": [{"type": "text", "text": '{"addresses":[{"id":"a1"}]}'}],
+                    "structuredContent": {"addresses": [{"id": "a1"}]},
+                    "isError": False,
+                },
+            },
+        )
+
+    result = client.call_tool(
+        "https://mcp.example.com/rpc", "t", "get_addresses", {}, transport=_transport(handler)
+    )
+
+    assert result == {"addresses": [{"id": "a1"}]}
+
+
+def test_call_tool_unwraps_json_from_a_text_content_block():
+    # Servers without an outputSchema return the payload as JSON text only.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {"content": [{"type": "text", "text": '{"orders":[{"orderId":"o1"}]}'}]},
+            },
+        )
+
+    result = client.call_tool(
+        "https://mcp.example.com/rpc", "t", "get_orders", {}, transport=_transport(handler)
+    )
+
+    assert result == {"orders": [{"orderId": "o1"}]}
+
+
+def test_call_tool_passes_through_a_bare_payload_without_an_envelope():
+    # Some servers answer with the payload directly; that must still work.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, json={"jsonrpc": "2.0", "id": 1, "result": {"orders": [{"orderId": "o1"}]}}
+        )
+
+    result = client.call_tool(
+        "https://mcp.example.com/rpc", "t", "get_orders", {}, transport=_transport(handler)
+    )
+
+    assert result == {"orders": [{"orderId": "o1"}]}
+
+
+def test_call_tool_raises_rpc_error_when_the_envelope_is_flagged_is_error():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {
+                    "content": [{"type": "text", "text": "token scope insufficient"}],
+                    "isError": True,
+                },
+            },
+        )
+
+    with pytest.raises(client.McpRpcError) as excinfo:
+        client.call_tool(
+            "https://mcp.example.com/rpc", "t", "get_orders", {}, transport=_transport(handler)
+        )
+    assert "scope insufficient" in excinfo.value.message
+
+
 def test_call_tool_raises_typed_error_on_json_rpc_error_field():
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(

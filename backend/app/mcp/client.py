@@ -110,7 +110,55 @@ def call_tool(
     if not isinstance(result, dict):
         raise McpTransportError(f"MCP response for {tool_name!r} had no `result` object")
 
+    return _unwrap_tool_result(result, tool_name)
+
+
+def _unwrap_tool_result(result: dict[str, Any], tool_name: str) -> dict[str, Any]:
+    """Return the tool's own output, not the MCP `tools/call` envelope.
+
+    A spec `tools/call` result wraps the tool output in
+    `{content: [...], structuredContent?: {...}, isError?: bool}` — the actual
+    payload is in `structuredContent`, or JSON-encoded in a `text` content
+    block. Adapters want that payload (`{"orders": [...]}`), so unwrap it here,
+    where the knowledge that this is an MCP envelope belongs. A result that is
+    already the bare payload (no envelope) is passed through unchanged.
+    """
+    if result.get("isError") is True:
+        raise McpRpcError(code=-32000, message=_text_block(result) or "tool call reported an error")
+
+    structured = result.get("structuredContent")
+    if isinstance(structured, dict):
+        return structured
+
+    if isinstance(result.get("content"), list):
+        text = _text_block(result)
+        if text is not None:
+            try:
+                parsed = json.loads(text)
+            except ValueError as exc:
+                raise McpTransportError(
+                    f"MCP tool {tool_name!r} returned non-JSON text content"
+                ) from exc
+            if isinstance(parsed, dict):
+                return parsed
+            raise McpTransportError(f"MCP tool {tool_name!r} content was not a JSON object")
+
     return result
+
+
+def _text_block(result: dict[str, Any]) -> str | None:
+    """Concatenated text of every `text` content block, or None if there are none."""
+    blocks = result.get("content")
+    if not isinstance(blocks, list):
+        return None
+    texts = [
+        block["text"]
+        for block in blocks
+        if isinstance(block, dict)
+        and block.get("type") == "text"
+        and isinstance(block.get("text"), str)
+    ]
+    return "".join(texts) if texts else None
 
 
 def _parse_jsonrpc(response: httpx.Response, tool_name: str) -> dict[str, Any]:

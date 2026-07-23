@@ -18,16 +18,33 @@ def _make_client(result: dict):
     return client, calls
 
 
-def _order(**overrides) -> dict:
-    fields = {
-        "orderId": "im-1",
-        "status": "DELIVERED",
-        "orderTime": "2026-07-20T12:00:00Z",
-        "grandTotal": 273,
-        "items": [],
+def _order(
+    *,
+    order_id: str = "im-1",
+    status: str = "DELIVERED",
+    created_at: str = "2026-07-20T12:00:00Z",
+    total_amount: float = 273,
+    item_total: float | None = None,
+    delivery_fee: float | None = None,
+    items: list | None = None,
+) -> dict:
+    # Mirrors the live get_orders shape: `createdAt` timestamp, top-level
+    # `totalAmount`, and the itemised money under `billDetails`.
+    order = {
+        "orderId": order_id,
+        "status": status,
+        "createdAt": created_at,
+        "totalAmount": total_amount,
+        "storeName": "Instamart",
+        "items": items if items is not None else [],
     }
-    fields.update(overrides)
-    return fields
+    bill: dict = {"grandTotal": total_amount}
+    if item_total is not None:
+        bill["itemTotal"] = item_total
+    if delivery_fee is not None:
+        bill["deliveryFee"] = delivery_fee
+    order["billDetails"] = bill
+    return order
 
 
 def test_fetch_orders_sends_order_type_dash_and_never_instamart():
@@ -45,7 +62,9 @@ def test_fetch_orders_sends_order_type_dash_and_never_instamart():
 
 
 def test_fetch_orders_converts_plain_rupees_to_paise():
-    client, _ = _make_client({"orders": [_order(grandTotal=273, itemTotal=250, deliveryFee=23)]})
+    client, _ = _make_client(
+        {"orders": [_order(total_amount=273, item_total=250, delivery_fee=23)]}
+    )
 
     orders = swiggy_instamart.fetch_orders(client, "https://mcp.swiggy.com/im", "token")
 
@@ -57,7 +76,7 @@ def test_fetch_orders_converts_plain_rupees_to_paise():
 
 
 def test_fetch_orders_converts_fractional_rupees_to_paise():
-    client, _ = _make_client({"orders": [_order(grandTotal=99.5)]})
+    client, _ = _make_client({"orders": [_order(total_amount=99.5)]})
 
     orders = swiggy_instamart.fetch_orders(client, "https://mcp.swiggy.com/im", "token")
 
@@ -69,7 +88,7 @@ def test_fetch_orders_grand_total_paise_is_never_recomputed_from_items():
         {
             "orders": [
                 _order(
-                    grandTotal=500,
+                    total_amount=500,
                     items=[
                         {"name": "Chips", "quantity": 2, "price": 100},
                         {"name": "Soda", "quantity": 1, "price": 50},
@@ -81,17 +100,31 @@ def test_fetch_orders_grand_total_paise_is_never_recomputed_from_items():
 
     orders = swiggy_instamart.fetch_orders(client, "https://mcp.swiggy.com/im", "token")
 
-    # Item components (2*100 + 1*50 = 250) sum to less than grandTotal (500) —
+    # Item components (2*100 + 1*50 = 250) sum to less than the total (500) —
     # if this were recomputed, it would be 25000, not 50000 (BRD §2.8).
     assert orders[0].grand_total_paise == 50000
 
 
 def test_fetch_orders_parses_iso8601_utc_timestamp_directly():
-    client, _ = _make_client({"orders": [_order(orderTime="2026-07-20T12:00:00Z")]})
+    client, _ = _make_client({"orders": [_order(created_at="2026-07-20T12:00:00Z")]})
 
     orders = swiggy_instamart.fetch_orders(client, "https://mcp.swiggy.com/im", "token")
 
     assert orders[0].ordered_at == datetime(2026, 7, 20, 12, 0, tzinfo=UTC)
+
+
+def test_fetch_orders_tolerates_an_order_with_no_bill_details():
+    # billDetails is the only source of item/fee totals; an order missing it
+    # must still normalize, with those fields left None.
+    order = _order()
+    del order["billDetails"]
+    client, _ = _make_client({"orders": [order]})
+
+    orders = swiggy_instamart.fetch_orders(client, "https://mcp.swiggy.com/im", "token")
+
+    assert orders[0].grand_total_paise == 27300
+    assert orders[0].item_total_paise is None
+    assert orders[0].fees_paise is None
 
 
 def test_fetch_orders_address_id_is_always_none():
@@ -106,8 +139,8 @@ def test_fetch_orders_marks_cancelled_status():
     client, _ = _make_client(
         {
             "orders": [
-                _order(orderId="im-2", status="CANCELLED"),
-                _order(orderId="im-3", status="DELIVERED"),
+                _order(order_id="im-2", status="CANCELLED"),
+                _order(order_id="im-3", status="DELIVERED"),
             ]
         }
     )
@@ -149,6 +182,19 @@ def test_fetch_orders_normalizes_items():
     assert item.product_variant_id == "var-1"
     assert item.category == "dairy"
     assert item.is_veg is True
+
+
+def test_fetch_orders_handles_items_without_a_price():
+    # The live get_orders items carry only name/quantity/itemId — no price.
+    client, _ = _make_client(
+        {"orders": [_order(items=[{"name": "Elaneer", "quantity": 1, "itemId": "I4YVYP7HGB"}])]}
+    )
+
+    orders = swiggy_instamart.fetch_orders(client, "https://mcp.swiggy.com/im", "token")
+
+    item = orders[0].items[0]
+    assert item.name == "Elaneer"
+    assert item.unit_price_paise is None
 
 
 def test_fetch_orders_returns_empty_list_when_no_orders():

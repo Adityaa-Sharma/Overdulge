@@ -18,7 +18,7 @@ never a mutating tool name anywhere in this file (NFR-1).
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -31,10 +31,18 @@ McpCaller = Callable[[str, str, str, dict[str, Any]], dict[str, Any]]
 
 _CANCELLED_STATUSES = {"CANCELLED"}
 
+# Swiggy Food's detail timestamps are wall-clock IST with no offset
+# (e.g. "2022-03-21 22:32:11"); the platform is India-only. Instamart, by
+# contrast, already sends UTC with a Z — so only Food needs this.
+_IST = timezone(timedelta(hours=5, minutes=30))
+
 
 def fetch_orders(client: McpCaller, base_url: str, access_token: str) -> list[NormalizedOrder]:
     addresses = client(base_url, access_token, "get_addresses", {})["addresses"]
-    address_ids = [address["addressId"] for address in addresses]
+    # get_addresses identifies each address as `id`; get_food_orders takes it
+    # back as the `addressId` argument (the two tools name the same value
+    # differently — confirmed against the live API).
+    address_ids = [address["id"] for address in addresses]
 
     raw_orders_by_id: dict[str, dict[str, Any]] = {}
     address_id_by_order_id: dict[str, str] = {}
@@ -70,7 +78,7 @@ def _normalize_order(
         status=status,
         is_cancelled=status.upper() in _CANCELLED_STATUSES,
         ordered_at=_resolve_ordered_at(detail),
-        grand_total_paise=_parse_paise(raw_order["grandTotal"]),
+        grand_total_paise=_parse_paise(raw_order["orderTotal"]),
         raw=raw_order,
         vendor_name=raw_order.get("restaurantName"),
         address_id=address_id,
@@ -87,8 +95,13 @@ def _parse_paise(formatted_amount: str) -> int:
 
 
 def _resolve_ordered_at(detail: dict[str, Any]) -> datetime:
-    """The list view's timestamp has no year; `get_food_order_details`
-    carries a full, timezone-aware ISO-8601 timestamp, which is the source
-    of truth for `ordered_at` (BRD §2.6).
+    """`get_food_order_details` nests the order under `order`, and its
+    `orderedTime` carries the full year the list view omits. The value is
+    naive IST wall-clock, so it is localised before converting to UTC (BRD
+    §2.6).
     """
-    return datetime.fromisoformat(detail["orderTime"]).astimezone(UTC)
+    ordered_time = detail["order"]["orderedTime"]
+    parsed = datetime.fromisoformat(ordered_time)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=_IST)
+    return parsed.astimezone(UTC)

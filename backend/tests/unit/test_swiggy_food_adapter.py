@@ -27,24 +27,28 @@ def _make_client(addresses, orders_by_address, details_by_order_id):
 
 
 def _raw_order(order_id, **overrides):
+    # Field names/values match the live get_food_orders response: the total is
+    # `orderTotal` (a "₹"-formatted string) and the status is title-case.
     fields = {
         "orderId": order_id,
-        "orderStatus": "DELIVERED",
-        "orderTime": "February 12, 0:26 AM",
-        "grandTotal": "₹273",
+        "orderStatus": "Delivered",
+        "orderedTime": "February 12, 0:26 AM",
+        "orderTotal": "₹273",
         "restaurantName": "Biryani House",
     }
     fields.update(overrides)
     return fields
 
 
-def _detail(order_id, order_time="2026-02-12T00:26:00+05:30"):
-    return {"orderId": order_id, "orderTime": order_time}
+def _detail(order_id, ordered_time="2026-02-12 00:26:00"):
+    # get_food_order_details nests the order under `order`, and `orderedTime` is
+    # naive IST wall-clock (no offset) — as the live API returns it.
+    return {"order": {"orderId": order_id, "orderedTime": ordered_time}}
 
 
 def test_fetch_orders_merges_orders_from_two_addresses_with_no_duplicates():
     client, calls = _make_client(
-        addresses=[{"addressId": "addr1"}, {"addressId": "addr2"}],
+        addresses=[{"id": "addr1"}, {"id": "addr2"}],
         orders_by_address={
             "addr1": [_raw_order("o1")],
             "addr2": [_raw_order("o2")],
@@ -59,6 +63,7 @@ def test_fetch_orders_merges_orders_from_two_addresses_with_no_duplicates():
     assert by_id["o1"].address_id == "addr1"
     assert by_id["o2"].address_id == "addr2"
     address_call_params = [call[3] for call in calls if call[2] == "get_food_orders"]
+    # The address's `id` is passed back to get_food_orders as `addressId`.
     assert address_call_params == [{"addressId": "addr1"}, {"addressId": "addr2"}]
 
 
@@ -66,7 +71,7 @@ def test_fetch_orders_keeps_first_address_when_order_id_repeats():
     # BRD §2.4: an order cannot legitimately appear under two addresses, but
     # the merge must not duplicate rows if it ever does.
     client, _ = _make_client(
-        addresses=[{"addressId": "addr1"}, {"addressId": "addr2"}],
+        addresses=[{"id": "addr1"}, {"id": "addr2"}],
         orders_by_address={
             "addr1": [_raw_order("o1")],
             "addr2": [_raw_order("o1")],
@@ -82,7 +87,7 @@ def test_fetch_orders_keeps_first_address_when_order_id_repeats():
 
 def test_fetch_orders_calls_get_food_order_details_for_every_order():
     client, calls = _make_client(
-        addresses=[{"addressId": "addr1"}],
+        addresses=[{"id": "addr1"}],
         orders_by_address={"addr1": [_raw_order("o1"), _raw_order("o2")]},
         details_by_order_id={"o1": _detail("o1"), "o2": _detail("o2")},
     )
@@ -95,9 +100,23 @@ def test_fetch_orders_calls_get_food_order_details_for_every_order():
 
 def test_fetch_orders_resolves_year_via_order_details():
     client, _ = _make_client(
-        addresses=[{"addressId": "addr1"}],
+        addresses=[{"id": "addr1"}],
         orders_by_address={"addr1": [_raw_order("o1")]},
-        details_by_order_id={"o1": _detail("o1", order_time="2026-02-12T00:26:00+05:30")},
+        details_by_order_id={"o1": _detail("o1", ordered_time="2026-02-12T00:26:00+05:30")},
+    )
+
+    orders = fetch_orders(client, _BASE_URL, _ACCESS_TOKEN)
+
+    assert orders[0].ordered_at == datetime(2026, 2, 11, 18, 56, tzinfo=UTC)
+
+
+def test_fetch_orders_treats_a_naive_detail_timestamp_as_ist():
+    # The live API returns naive wall-clock IST ("2026-02-12 00:26:00"); it
+    # must be read as IST, not as UTC, or every order lands 5.5h early.
+    client, _ = _make_client(
+        addresses=[{"id": "addr1"}],
+        orders_by_address={"addr1": [_raw_order("o1")]},
+        details_by_order_id={"o1": _detail("o1", ordered_time="2026-02-12 00:26:00")},
     )
 
     orders = fetch_orders(client, _BASE_URL, _ACCESS_TOKEN)
@@ -116,8 +135,8 @@ def test_fetch_orders_resolves_year_via_order_details():
 )
 def test_fetch_orders_parses_formatted_money_string_to_paise(formatted, expected_paise):
     client, _ = _make_client(
-        addresses=[{"addressId": "addr1"}],
-        orders_by_address={"addr1": [_raw_order("o1", grandTotal=formatted)]},
+        addresses=[{"id": "addr1"}],
+        orders_by_address={"addr1": [_raw_order("o1", orderTotal=formatted)]},
         details_by_order_id={"o1": _detail("o1")},
     )
 
@@ -128,7 +147,7 @@ def test_fetch_orders_parses_formatted_money_string_to_paise(formatted, expected
 
 def test_fetch_orders_sets_vendor_name_from_restaurant_name():
     client, _ = _make_client(
-        addresses=[{"addressId": "addr1"}],
+        addresses=[{"id": "addr1"}],
         orders_by_address={"addr1": [_raw_order("o1", restaurantName="Biryani House")]},
         details_by_order_id={"o1": _detail("o1")},
     )
@@ -144,7 +163,7 @@ def test_fetch_orders_sets_vendor_name_from_restaurant_name():
 )
 def test_fetch_orders_sets_is_cancelled_from_order_status(status, expected_is_cancelled):
     client, _ = _make_client(
-        addresses=[{"addressId": "addr1"}],
+        addresses=[{"id": "addr1"}],
         orders_by_address={"addr1": [_raw_order("o1", orderStatus=status)]},
         details_by_order_id={"o1": _detail("o1")},
     )
@@ -156,9 +175,9 @@ def test_fetch_orders_sets_is_cancelled_from_order_status(status, expected_is_ca
 
 
 def test_fetch_orders_keeps_raw_payload_and_never_recomputes_grand_total():
-    raw = _raw_order("o1", grandTotal="₹273")
+    raw = _raw_order("o1", orderTotal="₹273")
     client, _ = _make_client(
-        addresses=[{"addressId": "addr1"}],
+        addresses=[{"id": "addr1"}],
         orders_by_address={"addr1": [raw]},
         details_by_order_id={"o1": _detail("o1")},
     )
@@ -178,7 +197,7 @@ def test_fetch_orders_keeps_raw_payload_and_never_recomputes_grand_total():
 
 def test_fetch_orders_only_calls_read_only_tool_names():
     client, calls = _make_client(
-        addresses=[{"addressId": "addr1"}],
+        addresses=[{"id": "addr1"}],
         orders_by_address={"addr1": [_raw_order("o1")]},
         details_by_order_id={"o1": _detail("o1")},
     )
