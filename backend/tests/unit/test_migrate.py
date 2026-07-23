@@ -74,7 +74,9 @@ def test_require_database_url_forces_tls(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_require_database_url_preserves_existing_query_and_sslmode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pw@host:5432/postgres?sslmode=verify-full")
+    monkeypatch.setenv(
+        "DATABASE_URL", "postgresql://user:pw@host:5432/postgres?sslmode=verify-full"
+    )
 
     # Already explicit — must not be appended to twice.
     assert require_database_url().count("sslmode=") == 1
