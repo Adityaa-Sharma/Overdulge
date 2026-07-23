@@ -11,7 +11,12 @@ from pathlib import Path
 
 import pytest
 
-from scripts.migrate import discover_migrations, pending_migrations, require_database_url
+from scripts.migrate import (
+    discover_migrations,
+    pending_migrations,
+    require_database_url,
+    unreachable_host_hint,
+)
 
 
 def _touch(directory: Path, name: str) -> Path:
@@ -80,3 +85,35 @@ def test_require_database_url_preserves_existing_query_and_sslmode(
 
     # Already explicit — must not be appended to twice.
     assert require_database_url().count("sslmode=") == 1
+
+
+def test_unreachable_host_hint_explains_the_ipv6_only_direct_host() -> None:
+    """The deploy failed with a bare "Network is unreachable" against an IPv6
+    address, which says nothing about the cause or the fix.
+    """
+    hint = unreachable_host_hint(
+        "postgresql://postgres:pw@db.ref.supabase.co:5432/postgres",
+        'connection to server at "2406:da12:1f1:f800::1", port 5432 failed: Network is unreachable',
+    )
+
+    assert hint is not None
+    assert "pooler" in hint
+
+
+def test_unreachable_host_hint_is_silent_when_already_using_the_pooler() -> None:
+    # Same symptom, different cause — pointing at the pooler would be wrong.
+    hint = unreachable_host_hint(
+        "postgresql://postgres.ref:pw@aws-1-ap-northeast-2.pooler.supabase.com:5432/postgres",
+        "connection failed: Network is unreachable",
+    )
+
+    assert hint is None
+
+
+def test_unreachable_host_hint_is_silent_for_unrelated_failures() -> None:
+    hint = unreachable_host_hint(
+        "postgresql://postgres:pw@db.ref.supabase.co:5432/postgres",
+        "FATAL: password authentication failed for user",
+    )
+
+    assert hint is None

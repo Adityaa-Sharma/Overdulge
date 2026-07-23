@@ -53,6 +53,29 @@ def pending_migrations(available: list[Path], applied: set[str]) -> list[Path]:
     return [path for path in available if path.stem not in applied]
 
 
+def unreachable_host_hint(url: str, error: str) -> str | None:
+    """Explain an unroutable-address failure, when that is what happened.
+
+    Supabase's direct host (`db.<ref>.supabase.co`) publishes only an AAAA
+    record, and GitHub-hosted runners have no IPv6 route — so the deploy fails
+    with a bare "Network is unreachable" against an address nobody recognises.
+    The fix is the Supavisor pooler, which is reachable over IPv4; say so here
+    rather than leaving the next person to rediscover it.
+    """
+    if "network is unreachable" not in error.lower():
+        return None
+    if "pooler.supabase.com" in url:
+        return None
+    return (
+        "The database host appears to be IPv6-only and this runner has no IPv6 "
+        "route. Use the Supavisor session-mode pooler instead: Supabase > "
+        "Project Settings > Database > Connection string > Session pooler "
+        "(host looks like aws-N-<region>.pooler.supabase.com, user "
+        "postgres.<project-ref>). Update the SUPABASE_DB_URL secret, and "
+        "percent-encode any reserved characters in the password."
+    )
+
+
 def require_database_url() -> str:
     url = os.environ.get("DATABASE_URL", "").strip()
     if not url:
@@ -96,7 +119,13 @@ def main() -> int:
         print("no migration files found; nothing to do")
         return 0
 
-    with psycopg.connect(database_url, autocommit=True) as connection:
+    try:
+        connect = psycopg.connect(database_url, autocommit=True)
+    except psycopg.OperationalError as exc:
+        hint = unreachable_host_hint(database_url, str(exc))
+        raise SystemExit(f"{exc}\n\n{hint}" if hint else str(exc)) from exc
+
+    with connect as connection:
         with connection.cursor() as cursor:
             cursor.execute(TRACKING_TABLE_DDL)
             cursor.execute("select version from public.schema_migrations")
