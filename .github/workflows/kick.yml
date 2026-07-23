@@ -9,8 +9,13 @@ name: Kick (drain the ready queue)
 # should not consume Claude subscription usage.
 on:
   schedule:
-    - cron: "15 * * * *"   # hourly, at :15 past
+    - cron: "15 * * * *"   # hourly, at :15 past (safety net)
   workflow_dispatch: {}
+  # Run right after CI or the SA gate finishes, so an approved PR merges within
+  # ~a minute instead of waiting up to an hour for the next scheduled kick.
+  workflow_run:
+    workflows: ["CI", "SA Agent - PR Gate"]
+    types: [completed]
 concurrency:
   group: kick
   cancel-in-progress: false
