@@ -1,14 +1,17 @@
 import base64
 import json
 from collections import defaultdict
+from datetime import UTC, datetime
 
 import httpx
 import pytest
 
 from app.core import crypto, db
 from app.core.config import Settings, get_settings
+from app.llm import calories
 from app.oauth import engine
 from app.sync import cron
+from app.sync.normalize import NormalizedOrder, NormalizedOrderItem
 
 _TEST_KEY = base64.b64encode(b"0" * 32).decode("ascii")
 _FUTURE = "2099-01-01T00:00:00+00:00"
@@ -87,11 +90,17 @@ def _filter_rows(rows: list[dict], params: httpx.QueryParams) -> list[dict]:
     for row in rows:
         matches = True
         for key, value in params.items():
-            if key in ("select", "on_conflict") or not value.startswith("eq."):
+            if key in ("select", "on_conflict"):
                 continue
-            if str(row.get(key)) != value[len("eq.") :]:
-                matches = False
-                break
+            if value.startswith("eq."):
+                if str(row.get(key)) != value[len("eq.") :]:
+                    matches = False
+                    break
+            elif value.startswith("in.("):
+                ids = value[len("in.(") : -1].split(",") if value != "in.()" else []
+                if str(row.get(key)) not in ids:
+                    matches = False
+                    break
         if matches:
             result.append(row)
     return result
@@ -438,3 +447,117 @@ def test_failing_account_does_not_stop_daily_sync_loop(fake_postgrest):
     assert by_user["user-bad"].success is False
     assert by_user["user-good"].success is True
     assert by_user["user-good"].orders_captured == {"zepto": 1}
+
+
+def _normalized_order(platform_order_id: str, items: list[NormalizedOrderItem]) -> NormalizedOrder:
+    return NormalizedOrder(
+        platform_order_id=platform_order_id,
+        status="DELIVERED",
+        is_cancelled=False,
+        ordered_at=datetime(2026, 2, 1, tzinfo=UTC),
+        grand_total_paise=1000,
+        raw={},
+        items=items,
+    )
+
+
+def test_estimates_calories_once_per_distinct_eligible_name(fake_postgrest, monkeypatch):
+    account = _seed_linked_account(fake_postgrest, platform="zepto")
+    calls: list[str] = []
+    monkeypatch.setattr(calories, "estimate_calories", lambda name, **_: calls.append(name) or 250)
+    order = _normalized_order(
+        "z1",
+        [
+            NormalizedOrderItem(name="Choco Bar", quantity=1, category="ice-cream"),
+            NormalizedOrderItem(name="choco bar", quantity=2, category="ice-cream"),
+        ],
+    )
+    monkeypatch.setattr(
+        cron,
+        "_fetch_orders_by_sub_platform",
+        lambda platform, access_token, *, transport=None: [("zepto", [order])],
+    )
+    transport, _ = _oauth_and_mcp_transport({})
+    client = db.service_role_client()
+
+    result = cron.run_sync_for_account(client, account, transport=transport)
+
+    assert result.success is True
+    assert calls == ["Choco Bar"]
+    stored_items = fake_postgrest.tables["order_items"]
+    assert len(stored_items) == 2
+    assert all(item["calorie_estimate"] == 250 for item in stored_items)
+
+
+def test_ineligible_item_never_passed_to_estimator(fake_postgrest, monkeypatch):
+    account = _seed_linked_account(fake_postgrest, platform="zepto")
+    calls: list[str] = []
+    monkeypatch.setattr(calories, "estimate_calories", lambda name, **_: calls.append(name) or 100)
+    order = _normalized_order(
+        "z2", [NormalizedOrderItem(name="Rice 5kg", quantity=1, category="grocery")]
+    )
+    monkeypatch.setattr(
+        cron,
+        "_fetch_orders_by_sub_platform",
+        lambda platform, access_token, *, transport=None: [("zepto", [order])],
+    )
+    transport, _ = _oauth_and_mcp_transport({})
+    client = db.service_role_client()
+
+    result = cron.run_sync_for_account(client, account, transport=transport)
+
+    assert result.success is True
+    assert calls == []
+    stored_item = fake_postgrest.tables["order_items"][0]
+    assert stored_item["calorie_estimate"] is None
+
+
+def test_already_estimated_item_is_never_re_estimated(fake_postgrest, monkeypatch):
+    account = _seed_linked_account(fake_postgrest, platform="zepto")
+    calls: list[str] = []
+    monkeypatch.setattr(calories, "estimate_calories", lambda name, **_: calls.append(name) or 999)
+    order = _normalized_order(
+        "z3",
+        [
+            NormalizedOrderItem(
+                name="Choco Bar", quantity=1, category="ice-cream", calorie_estimate=180
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        cron,
+        "_fetch_orders_by_sub_platform",
+        lambda platform, access_token, *, transport=None: [("zepto", [order])],
+    )
+    transport, _ = _oauth_and_mcp_transport({})
+    client = db.service_role_client()
+
+    result = cron.run_sync_for_account(client, account, transport=transport)
+
+    assert result.success is True
+    assert calls == []
+    stored_item = fake_postgrest.tables["order_items"][0]
+    assert stored_item["calorie_estimate"] == 180
+
+
+def test_swiggy_food_item_is_always_eligible_regardless_of_category(fake_postgrest, monkeypatch):
+    account = _seed_linked_account(fake_postgrest, platform="swiggy")
+    calls: list[str] = []
+    monkeypatch.setattr(calories, "estimate_calories", lambda name, **_: calls.append(name) or 400)
+    order = _normalized_order(
+        "f1", [NormalizedOrderItem(name="Paneer Tikka", quantity=1, category=None)]
+    )
+    monkeypatch.setattr(
+        cron,
+        "_fetch_orders_by_sub_platform",
+        lambda platform, access_token, *, transport=None: [("swiggy_food", [order])],
+    )
+    transport, _ = _oauth_and_mcp_transport({})
+    client = db.service_role_client()
+
+    result = cron.run_sync_for_account(client, account, transport=transport)
+
+    assert result.success is True
+    assert calls == ["Paneer Tikka"]
+    stored_item = fake_postgrest.tables["order_items"][0]
+    assert stored_item["calorie_estimate"] == 400

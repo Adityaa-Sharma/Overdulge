@@ -25,13 +25,14 @@ import httpx
 from app.core import db, linked_accounts
 from app.core.db import PostgrestClient
 from app.core.safe_log import log_event
+from app.llm import calories
 from app.mcp.adapters import swiggy_food, swiggy_instamart, zepto
 from app.mcp.client import call_tool
 from app.oauth import engine
 from app.oauth.engine import PlatformConfig
 from app.oauth.platforms import swiggy as swiggy_platform
 from app.oauth.platforms import zepto as zepto_platform
-from app.sync.normalize import upsert_orders
+from app.sync.normalize import NormalizedOrder, upsert_orders
 
 _PLATFORM_CONFIGS: dict[str, PlatformConfig] = {
     "swiggy": swiggy_platform.CONFIG,
@@ -91,6 +92,7 @@ def run_sync_for_account(
         ):
             result = upsert_orders(client, user_id=user_id, platform=sub_platform, orders=orders)
             orders_captured[sub_platform] = result.orders_upserted
+            _estimate_missing_calories(client, platform=sub_platform, orders=orders)
 
         linked_accounts.record_sync_result(
             client,
@@ -135,6 +137,57 @@ def run_sync_for_account(
         orders_captured=orders_captured,
         error=error,
     )
+
+
+def _estimate_missing_calories(
+    client: PostgrestClient, *, platform: str, orders: list[NormalizedOrder]
+) -> None:
+    """Ingest-time calorie estimation hook (#81, ADR-0008 §3), run after
+    `upsert_orders` returns for one sub-platform.
+
+    `normalize.py` never writes `calorie_estimate` (ADR-0008 §3), so every
+    row `upsert_orders` just inserted for this batch is `NULL` here
+    regardless of any earlier sync. For the just-upserted `order_items` rows
+    where `calories.is_calorie_eligible(platform, category)` is true, groups
+    by `lower(trim(name))` and calls `estimate_calories` once per distinct
+    name — a dish reordered several times in one batch is one LLM call, not
+    one per row — then writes the result back to every matching row via a
+    plain PATCH that touches only `calorie_estimate`.
+    """
+    platform_order_ids = [order.platform_order_id for order in orders]
+    if not platform_order_ids:
+        return
+    order_rows = client.select(
+        "orders",
+        columns="id",
+        filters={
+            "platform": f"eq.{platform}",
+            "platform_order_id": f"in.({','.join(platform_order_ids)})",
+        },
+    )
+    order_ids = [row["id"] for row in order_rows]
+    if not order_ids:
+        return
+    items = client.select("order_items", filters={"order_id": f"in.({','.join(order_ids)})"})
+
+    pending_by_name: dict[str, list[dict[str, Any]]] = {}
+    for item in items:
+        if item["calorie_estimate"] is not None:
+            continue
+        if not calories.is_calorie_eligible(platform, item["category"]):
+            continue
+        pending_by_name.setdefault(item["name"].strip().lower(), []).append(item)
+
+    for group in pending_by_name.values():
+        estimate = calories.estimate_calories(group[0]["name"])
+        if estimate is None:
+            continue
+        item_ids = [item["id"] for item in group]
+        client.update(
+            "order_items",
+            {"calorie_estimate": estimate},
+            filters={"id": f"in.({','.join(item_ids)})"},
+        )
 
 
 def run_daily_sync(*, transport: httpx.BaseTransport | None = None) -> list[SyncResult]:
