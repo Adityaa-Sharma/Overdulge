@@ -252,3 +252,85 @@ export async function askQuery(question: string): Promise<QueryResponse> {
   }
   return response.json()
 }
+
+/** One budget cap plus this month's progress against it (FR-5 AC-2; `category: null` is the overall cap). */
+export interface BudgetProgress {
+  id: string
+  category: string | null
+  cap_paise: number
+  spent_paise: number
+  pct: number
+  status: 'ok' | 'near' | 'over'
+}
+
+/** Response contract for `GET /api/v1/budgets` (docs/architecture/features/6-budgeting.md §3). */
+export interface BudgetsResponse {
+  month: string
+  budgets: BudgetProgress[]
+}
+
+/** Fetches every cap set for `month` (`YYYY-MM` or `YYYY-MM-DD`) plus its progress (FR-5 AC-2). */
+export async function getBudgets(month: string): Promise<BudgetsResponse> {
+  const response = await apiFetch(`/budgets?month=${encodeURIComponent(month)}`)
+  if (!response.ok) {
+    throw new ApiError('Failed to load budgets', response.status)
+  }
+  return response.json()
+}
+
+/** Raw `budgets` row returned by the create/update route — no progress figures (those come from `getBudgets`). */
+export interface BudgetRow {
+  id: string
+  user_id: string
+  month: string
+  category: string | null
+  cap_paise: number
+}
+
+/** Creates or replaces the cap for `(month, category)` — `category: null` sets the overall cap (FR-5 AC-1, AC-6). */
+export async function upsertBudget(input: {
+  month: string
+  category: string | null
+  cap_paise: number
+}): Promise<BudgetRow> {
+  const response = await apiFetch('/budgets', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!response.ok) {
+    throw new ApiError(await detailOr(response, 'Failed to save budget'), response.status)
+  }
+  return response.json()
+}
+
+/** Deletes a cap; never touches `orders`/`order_items` (FR-5 AC-6). */
+export async function deleteBudget(id: string): Promise<void> {
+  const response = await apiFetch(`/budgets/${id}`, { method: 'DELETE' })
+  if (!response.ok) {
+    throw new ApiError('Failed to delete budget', response.status)
+  }
+}
+
+/** One grounded "where to cut" suggestion, referencing the user's real order lines (FR-5 AC-3). */
+export interface BudgetSuggestion {
+  category: string | null
+  text: string
+}
+
+export interface BudgetSuggestionsResponse {
+  suggestions: BudgetSuggestion[]
+}
+
+/**
+ * Fetches "where to cut" suggestions for `month`. Callers should only call this
+ * once `getBudgets` shows at least one `"near"`/`"over"` category (feature note
+ * §7) — the backend itself is cheap to call with none, returning `{"suggestions": []}`.
+ */
+export async function getBudgetSuggestions(month: string): Promise<BudgetSuggestionsResponse> {
+  const response = await apiFetch(`/budgets/suggestions?month=${encodeURIComponent(month)}`)
+  if (!response.ok) {
+    throw new ApiError('Failed to load suggestions', response.status)
+  }
+  return response.json()
+}

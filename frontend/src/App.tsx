@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import AppShell from './components/AppShell'
 import { SessionProvider } from './lib/session'
+import Budgets from './routes/Budgets'
 import Dashboard from './routes/Dashboard'
 import Login from './routes/Login'
 import Query from './routes/Query'
@@ -18,6 +19,7 @@ function App() {
             <Route element={<AppShell />}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/query" element={<Query />} />
+              <Route path="/budgets" element={<Budgets />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
           </Route>
