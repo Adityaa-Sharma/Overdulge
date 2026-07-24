@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     llm_provider: str = "groq"
     llm_model: str = "llama-3.3-70b-versatile"
     groq_api_key: str | None = None
+    query_timeout_seconds: float = 9.0
     token_encryption_key: str | None = None
     backend_base_url: str | None = None
     frontend_settings_url: str | None = None
