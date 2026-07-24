@@ -8,3 +8,13 @@ export function formatPaise(paise: number): string {
 export function formatShortDate(isoDate: string): string {
   return new Date(isoDate).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
 }
+
+/**
+ * Formats an estimated kcal figure with a leading "~" and a spelled-out
+ * "(estimate)" tag (FR-6.3/AC-3: every calorie figure must be visibly
+ * labeled as an estimate). Used for every kcal number this feature renders,
+ * e.g. `formatKcalEstimate(1234)` -> "~1,234 kcal (estimate)".
+ */
+export function formatKcalEstimate(kcal: number): string {
+  return `~${kcal.toLocaleString('en-IN')} kcal (estimate)`
+}

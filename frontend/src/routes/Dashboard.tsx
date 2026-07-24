@@ -200,14 +200,14 @@ function PopulatedDashboard({ data }: { data: DashboardResponse }) {
           title="Weekly spend"
           points={data.trend.weekly.map((point) => ({
             periodStart: point.period_start,
-            valuePaise: point.combined_paise,
+            value: point.combined_paise,
           }))}
         />
         <TrendChart
           title="Monthly spend"
           points={data.trend.monthly.map((point) => ({
             periodStart: point.period_start,
-            valuePaise: point.combined_paise,
+            value: point.combined_paise,
           }))}
         />
       </section>
