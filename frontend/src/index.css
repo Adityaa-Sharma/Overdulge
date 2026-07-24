@@ -488,6 +488,14 @@ input:focus {
   color: var(--ink-2);
   background: var(--paper-2);
 }
+.badge-warn {
+  color: var(--gold-deep);
+  background: var(--gold-soft);
+}
+.badge-bad {
+  color: var(--bad);
+  background: var(--bad-soft);
+}
 
 /* Tilted sticker — the quirk, used once or twice per screen at most. */
 .sticker {
@@ -808,6 +816,16 @@ input:focus {
   height: 100%;
   border-radius: 999px;
   background: linear-gradient(90deg, var(--gold), #f58a00);
+}
+/* Budget progress status colours (FR-5) — same track, a status-driven fill. */
+.chart-breakdown__fill--ok {
+  background: var(--good);
+}
+.chart-breakdown__fill--near {
+  background: var(--gold);
+}
+.chart-breakdown__fill--over {
+  background: var(--bad);
 }
 
 @media (prefers-reduced-motion: reduce) {

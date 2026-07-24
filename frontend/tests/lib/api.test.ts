@@ -2,12 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ApiError,
   askQuery,
+  deleteBudget,
+  getBudgetSuggestions,
+  getBudgets,
   getDashboard,
   getLinkStatus,
   getSyncStatus,
   startLink,
   triggerSync,
   unlink,
+  upsertBudget,
 } from '../../src/lib/api'
 
 const { getSession } = vi.hoisted(() => ({ getSession: vi.fn() }))
@@ -129,6 +133,92 @@ describe('askQuery', () => {
   })
 })
 
+describe('getBudgets', () => {
+  it('returns the parsed budgets response and attaches the bearer token', async () => {
+    const body = { month: '2026-07-01', budgets: [] }
+    const fetchMock = mockFetchOnce({ json: async () => body })
+
+    const result = await getBudgets('2026-07-01')
+
+    expect(result).toEqual(body)
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toContain('/budgets?month=2026-07-01')
+    expect((init.headers as Headers).get('Authorization')).toBe('Bearer test-token')
+  })
+
+  it('throws ApiError when the response is not ok', async () => {
+    mockFetchOnce({ ok: false, status: 500 })
+
+    await expect(getBudgets('2026-07-01')).rejects.toThrow(ApiError)
+  })
+})
+
+describe('upsertBudget', () => {
+  it('posts the cap and returns the saved row', async () => {
+    const body = { id: 'b-1', user_id: 'u-1', month: '2026-07-01', category: null, cap_paise: 800000 }
+    const fetchMock = mockFetchOnce({ status: 201, json: async () => body })
+
+    const result = await upsertBudget({ month: '2026-07-01', category: null, cap_paise: 800000 })
+
+    expect(result).toEqual(body)
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body)).toEqual({
+      month: '2026-07-01',
+      category: null,
+      cap_paise: 800000,
+    })
+  })
+
+  it("surfaces the backend's detail message on failure", async () => {
+    mockFetchOnce({
+      ok: false,
+      status: 422,
+      json: async () => ({ detail: 'invalid month' }),
+    })
+
+    await expect(
+      upsertBudget({ month: 'bad', category: null, cap_paise: 100 }),
+    ).rejects.toThrow('invalid month')
+  })
+})
+
+describe('deleteBudget', () => {
+  it('sends a DELETE request for the budget id', async () => {
+    const fetchMock = mockFetchOnce({ status: 204, json: async () => undefined })
+
+    await deleteBudget('b-1')
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toContain('/budgets/b-1')
+    expect(init.method).toBe('DELETE')
+  })
+
+  it('throws ApiError on failure', async () => {
+    mockFetchOnce({ ok: false, status: 404 })
+
+    await expect(deleteBudget('missing')).rejects.toThrow(ApiError)
+  })
+})
+
+describe('getBudgetSuggestions', () => {
+  it('returns the parsed suggestions list', async () => {
+    const body = { suggestions: [{ category: 'dining', text: 'Cut back on dining.' }] }
+    const fetchMock = mockFetchOnce({ json: async () => body })
+
+    const result = await getBudgetSuggestions('2026-07-01')
+
+    expect(result).toEqual(body)
+    expect(fetchMock.mock.calls[0][0]).toContain('/budgets/suggestions?month=2026-07-01')
+  })
+
+  it('throws ApiError when the response is not ok', async () => {
+    mockFetchOnce({ ok: false, status: 500 })
+
+    await expect(getBudgetSuggestions('2026-07-01')).rejects.toThrow(ApiError)
+  })
+})
+
 /**
  * These assert the *whole* path, not a fragment of it. The production outage
  * that 404'd every authenticated call shipped past a suite that only checked
@@ -144,6 +234,18 @@ describe('request URLs', () => {
     ['triggerSync', () => triggerSync('zepto'), /\/api\/v1\/sync\/zepto$/],
     ['getDashboard', () => getDashboard(), /\/api\/v1\/dashboard$/],
     ['askQuery', () => askQuery('how much did I spend?'), /\/api\/v1\/query$/],
+    ['getBudgets', () => getBudgets('2026-07-01'), /\/api\/v1\/budgets\?month=2026-07-01$/],
+    [
+      'upsertBudget',
+      () => upsertBudget({ month: '2026-07-01', category: null, cap_paise: 100 }),
+      /\/api\/v1\/budgets$/,
+    ],
+    ['deleteBudget', () => deleteBudget('b-1'), /\/api\/v1\/budgets\/b-1$/],
+    [
+      'getBudgetSuggestions',
+      () => getBudgetSuggestions('2026-07-01'),
+      /\/api\/v1\/budgets\/suggestions\?month=2026-07-01$/,
+    ],
   ])('%s targets the versioned API path', async (_name, call, expected) => {
     const fetchMock = mockFetchOnce({ json: async () => ({}) })
 
