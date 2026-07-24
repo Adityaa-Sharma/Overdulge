@@ -334,3 +334,49 @@ export async function getBudgetSuggestions(month: string): Promise<BudgetSuggest
   }
   return response.json()
 }
+
+/** One week's estimated calorie total (FR-6, docs/architecture/features/7-calorie-estimation.md §6). */
+export interface CalorieTrendPoint {
+  period_start: string
+  estimate_kcal: number
+}
+
+/** Response contract for `GET /api/v1/calories`. Every kcal figure is an LLM-grounded estimate, never measured intake. */
+export interface CaloriesResponse {
+  generated_at: string
+  has_data: boolean
+  totals: {
+    this_week_estimate_kcal: number
+    this_month_estimate_kcal: number
+  }
+  trend: {
+    weekly: CalorieTrendPoint[]
+  }
+}
+
+/** Fetches this user's calorie totals + weekly trend (FR-6 AC-2). */
+export async function getCalories(): Promise<CaloriesResponse> {
+  const response = await apiFetch('/calories')
+  if (!response.ok) {
+    throw new ApiError('Failed to load calorie estimates', response.status)
+  }
+  return response.json()
+}
+
+export interface CaloriesCommentaryResponse {
+  blurb: string
+}
+
+/**
+ * Fetches this week's playful ordering-habits commentary (FR-6.4). Callers
+ * should only call this after `getCalories` resolves with `has_data: true`,
+ * so it never blocks the totals/trend render — same lazy pattern as
+ * `getBudgetSuggestions` (ADR-0008 §5).
+ */
+export async function getCaloriesCommentary(): Promise<CaloriesCommentaryResponse> {
+  const response = await apiFetch('/calories/commentary')
+  if (!response.ok) {
+    throw new ApiError('Failed to load commentary', response.status)
+  }
+  return response.json()
+}
