@@ -59,6 +59,13 @@ backend/
                       rows (no I/O) — see ADR-0006
     llm/
       agent.py        LangChain agent(s) over the canonical schema
+      calories.py     eligibility rule, reference-grounded calorie
+                      estimation, weekly blurb generation — see ADR-0008
+      tone_guard.py   tone-safety denylist guard for LLM-generated
+                      commentary — see ADR-0008 §4
+      data/
+        indian_nutrition_reference.json  curated grounding dataset for
+                      calorie estimation (ADR-0008 §1)
     digest/
       cron.py         weekly digest cron entrypoint, enumerates every
                       user_id with a current-month budgets row (service-
@@ -210,3 +217,9 @@ See `docs/architecture/decisions/`:
   ADR-0003's grounding guard unmodified, `GET /api/v1/budgets/suggestions`
   as its own lazily-called route, and the weekly digest (Resend) extending
   ADR-0002's service-role confinement to `digest/`.
+- [ADR-0008](decisions/0008-calorie-estimation-grounding-and-tone-safety.md)
+  — reference-grounded prompting (not model recall) for calorie estimates,
+  a schema-free eligibility rule over existing `platform`/`category`
+  columns, an ingest-time estimation hook inside `sync/cron.py`'s
+  `run_sync_for_account` (not `normalize.py`), and a code-level tone guard
+  backing up QA's tone-safety check.
