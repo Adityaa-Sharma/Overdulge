@@ -3,6 +3,7 @@ import AppShell from './components/AppShell'
 import { SessionProvider } from './lib/session'
 import Dashboard from './routes/Dashboard'
 import Login from './routes/Login'
+import Query from './routes/Query'
 import RequireAuth from './routes/RequireAuth'
 import Settings from './routes/Settings'
 
@@ -16,6 +17,7 @@ function App() {
             {/* Every authenticated screen shares the same header + nav. */}
             <Route element={<AppShell />}>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/query" element={<Query />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
           </Route>
