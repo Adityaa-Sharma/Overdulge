@@ -12,10 +12,15 @@ It passes `mcp/client.py`'s `call_tool` through to `swiggy_food`/
 `swiggy_instamart` unmodified (their `McpCaller` type matches `call_tool`'s
 signature exactly, by design — see those modules' docstrings) and passes a
 transport straight through to `zepto`, which calls `call_tool` itself.
+
+After each sub-platform's `upsert_orders` returns, this module also runs the
+ingest-time calorie-estimation step (issue #81, ADR-0008 §3): `llm/calories.py`
+decides eligibility and produces estimates, `normalize.py` stays untouched.
 """
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -25,13 +30,14 @@ import httpx
 from app.core import db, linked_accounts
 from app.core.db import PostgrestClient
 from app.core.safe_log import log_event
+from app.llm import calories as llm_calories
 from app.mcp.adapters import swiggy_food, swiggy_instamart, zepto
 from app.mcp.client import call_tool
 from app.oauth import engine
 from app.oauth.engine import PlatformConfig
 from app.oauth.platforms import swiggy as swiggy_platform
 from app.oauth.platforms import zepto as zepto_platform
-from app.sync.normalize import upsert_orders
+from app.sync.normalize import NormalizedOrder, upsert_orders
 
 _PLATFORM_CONFIGS: dict[str, PlatformConfig] = {
     "swiggy": swiggy_platform.CONFIG,
@@ -91,6 +97,9 @@ def run_sync_for_account(
         ):
             result = upsert_orders(client, user_id=user_id, platform=sub_platform, orders=orders)
             orders_captured[sub_platform] = result.orders_upserted
+            _estimate_calories_for_batch(
+                client, user_id=user_id, platform=sub_platform, orders=orders
+            )
 
         linked_accounts.record_sync_result(
             client,
@@ -135,6 +144,64 @@ def run_sync_for_account(
         orders_captured=orders_captured,
         error=error,
     )
+
+
+def _estimate_calories_for_batch(
+    client: PostgrestClient,
+    *,
+    user_id: str,
+    platform: str,
+    orders: list[NormalizedOrder],
+) -> None:
+    """Ingest-time calorie estimation (issue #81, ADR-0008 §3): after
+    `upsert_orders` returns for one sub-platform, looks up that batch's
+    `order_items` rows and, for the ones that are calorie-eligible
+    (`llm/calories.py::is_calorie_eligible`) and don't already carry an
+    estimate, groups them by `lower(trim(name))` so a dish reordered
+    multiple times in one sync batch costs one `estimate_calories` call, then
+    writes the result back to every matching row via a plain PostgREST
+    update — no other column is touched. `normalize.py` stays untouched.
+    """
+    if not orders:
+        return
+
+    platform_order_ids = [order.platform_order_id for order in orders]
+    order_rows = client.select(
+        "orders",
+        columns="id",
+        filters={
+            "user_id": f"eq.{user_id}",
+            "platform": f"eq.{platform}",
+            "platform_order_id": f"in.({','.join(platform_order_ids)})",
+        },
+    )
+    order_ids = [row["id"] for row in order_rows]
+    if not order_ids:
+        return
+
+    item_rows = client.select(
+        "order_items",
+        columns="id,name,category,calorie_estimate",
+        filters={"order_id": f"in.({','.join(order_ids)})"},
+    )
+
+    item_ids_by_name: dict[str, list[str]] = defaultdict(list)
+    for item in item_rows:
+        if item.get("calorie_estimate") is not None:
+            continue
+        if not llm_calories.is_calorie_eligible(platform, item.get("category")):
+            continue
+        item_ids_by_name[item["name"].strip().lower()].append(item["id"])
+
+    for name, item_ids in item_ids_by_name.items():
+        estimate = llm_calories.estimate_calories(name)
+        if estimate is None:
+            continue
+        client.update(
+            "order_items",
+            {"calorie_estimate": estimate},
+            filters={"id": f"in.({','.join(item_ids)})"},
+        )
 
 
 def run_daily_sync(*, transport: httpx.BaseTransport | None = None) -> list[SyncResult]:
