@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ApiError,
+  askQuery,
   getDashboard,
   getLinkStatus,
   getSyncStatus,
@@ -92,6 +93,42 @@ describe('unlink', () => {
   })
 })
 
+describe('askQuery', () => {
+  it('posts the question and returns the parsed answer', async () => {
+    const body = { amount_paise: 12300, explanation: 'You spent ₹123.', has_data: true }
+    const fetchMock = mockFetchOnce({ json: async () => body })
+
+    const result = await askQuery('how much did I spend on milk?')
+
+    expect(result).toEqual(body)
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body)).toEqual({ question: 'how much did I spend on milk?' })
+  })
+
+  it("surfaces the backend's error envelope message on failure", async () => {
+    mockFetchOnce({
+      ok: false,
+      status: 502,
+      json: async () => ({ error: { code: 'agent_error', message: 'Something went wrong.' } }),
+    })
+
+    await expect(askQuery('how much?')).rejects.toThrow('Something went wrong.')
+  })
+
+  it('falls back to a generic message when the body has no error envelope', async () => {
+    mockFetchOnce({
+      ok: false,
+      status: 504,
+      json: async () => {
+        throw new SyntaxError('Unexpected token <')
+      },
+    })
+
+    await expect(askQuery('how much?')).rejects.toThrow(/something went wrong answering/i)
+  })
+})
+
 /**
  * These assert the *whole* path, not a fragment of it. The production outage
  * that 404'd every authenticated call shipped past a suite that only checked
@@ -106,6 +143,7 @@ describe('request URLs', () => {
     ['getSyncStatus', () => getSyncStatus(), /\/api\/v1\/sync\/status$/],
     ['triggerSync', () => triggerSync('zepto'), /\/api\/v1\/sync\/zepto$/],
     ['getDashboard', () => getDashboard(), /\/api\/v1\/dashboard$/],
+    ['askQuery', () => askQuery('how much did I spend?'), /\/api\/v1\/query$/],
   ])('%s targets the versioned API path', async (_name, call, expected) => {
     const fetchMock = mockFetchOnce({ json: async () => ({}) })
 

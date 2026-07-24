@@ -210,3 +210,45 @@ export async function getDashboard(): Promise<DashboardResponse> {
   }
   return response.json()
 }
+
+/**
+ * Response contract for `POST /api/v1/query` (FR-4). `amount_paise` is the
+ * raw, DB-computed figure the model's explanation is grounded in (never
+ * parsed out of the model's prose, per ADR-0003) and is `null` either when
+ * `has_data` is false or when the answer breaks spend down across several
+ * rows rather than stating one total.
+ */
+export interface QueryResponse {
+  amount_paise: number | null
+  explanation: string
+  has_data: boolean
+}
+
+/**
+ * `POST /api/v1/query` uses SYSTEM.md §4's `{"error": {"code", "message"}}`
+ * envelope (unlike the link routes' `detail` field), so failures need their
+ * own extractor.
+ */
+async function queryErrorMessage(response: Response): Promise<string> {
+  const fallback = 'Something went wrong answering that question — please try again.'
+  try {
+    const body = await response.json()
+    const message = body?.error?.message
+    return typeof message === 'string' && message.trim() ? message : fallback
+  } catch {
+    return fallback
+  }
+}
+
+/** Asks a free-text spending question (FR-4 AC-1), forwarding the caller's Supabase JWT. */
+export async function askQuery(question: string): Promise<QueryResponse> {
+  const response = await apiFetch('/query', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question }),
+  })
+  if (!response.ok) {
+    throw new ApiError(await queryErrorMessage(response), response.status)
+  }
+  return response.json()
+}
