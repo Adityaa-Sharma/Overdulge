@@ -41,7 +41,7 @@ READY_TO_EAT_CATEGORIES: set[str] = {
 
 _REFERENCE_DATASET_PATH = Path(__file__).parent / "data" / "indian_nutrition_reference.json"
 
-_LEADING_NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
+_KCAL_ONLY_RE = re.compile(r"-?\d+(?:\.\d+)?")
 
 
 def is_calorie_eligible(platform: str, category: str | None) -> bool:
@@ -82,7 +82,14 @@ def _build_prompt(item_name: str, reference_dataset: str) -> str:
 
 
 def _parse_kcal(text: str) -> int | None:
-    match = _LEADING_NUMBER_RE.search(text)
+    """Parses `text` as a bare kcal integer, discarding anything else.
+
+    The response must be *only* the number (ADR-0008 §1's "grounded, not
+    guessed") — a hedge like "roughly 450 kcal" is rejected rather than
+    having its first number extracted, since the model isn't guaranteed to
+    put the intended answer first.
+    """
+    match = _KCAL_ONLY_RE.fullmatch(text.strip())
     if match is None:
         return None
     try:

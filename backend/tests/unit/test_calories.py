@@ -106,6 +106,12 @@ def test_estimate_calories_never_raises_on_malformed_response():
     assert calories.estimate_calories("empty response item", chat_model=model) is None
 
 
+def test_estimate_calories_returns_none_for_hedged_response_with_a_leading_number():
+    model = FakeChatModel(["As of 2024 guidelines, roughly 450 kcal"])
+
+    assert calories.estimate_calories("hedging item", chat_model=model) is None
+
+
 @pytest.fixture(autouse=True)
 def _clear_settings_cache():
     from app.core.config import get_settings
