@@ -2,12 +2,16 @@ import { formatPaise, formatShortDate } from '../../lib/format'
 
 export interface TrendChartPoint {
   periodStart: string
-  valuePaise: number
+  value: number
 }
 
 interface TrendChartProps {
   title: string
   points: TrendChartPoint[]
+  /** Formats a point's raw value for display; defaults to paise-as-INR. */
+  formatValue?: (value: number) => string
+  /** Screen-reader table column header for the value; defaults to "Spend". */
+  valueLabel?: string
 }
 
 const CHART_HEIGHT = 140
@@ -20,8 +24,13 @@ const BAR_GAP = 12
  * carrying the same figures for screen readers, since a handful of bars with
  * no axis ticks isn't reliably announced from SVG alone.
  */
-export default function TrendChart({ title, points }: TrendChartProps) {
-  const max = Math.max(1, ...points.map((point) => point.valuePaise))
+export default function TrendChart({
+  title,
+  points,
+  formatValue = formatPaise,
+  valueLabel = 'Spend',
+}: TrendChartProps) {
+  const max = Math.max(1, ...points.map((point) => point.value))
   const width = Math.max(points.length * (BAR_WIDTH + BAR_GAP), 200)
 
   return (
@@ -30,18 +39,18 @@ export default function TrendChart({ title, points }: TrendChartProps) {
       <div className="chart-trend__scroll">
         <svg
           role="img"
-          aria-label={`${title}: ${points.map((point) => `${formatShortDate(point.periodStart)} ${formatPaise(point.valuePaise)}`).join(', ')}`}
+          aria-label={`${title}: ${points.map((point) => `${formatShortDate(point.periodStart)} ${formatValue(point.value)}`).join(', ')}`}
           width={width}
           height={CHART_HEIGHT + 24}
           viewBox={`0 0 ${width} ${CHART_HEIGHT + 24}`}
         >
           {points.map((point, index) => {
-            const barHeight = Math.max(2, (point.valuePaise / max) * CHART_HEIGHT)
+            const barHeight = Math.max(2, (point.value / max) * CHART_HEIGHT)
             const x = index * (BAR_WIDTH + BAR_GAP)
             return (
               <g key={point.periodStart}>
                 <title>
-                  {formatShortDate(point.periodStart)}: {formatPaise(point.valuePaise)}
+                  {formatShortDate(point.periodStart)}: {formatValue(point.value)}
                 </title>
                 <rect
                   x={x}
@@ -79,14 +88,14 @@ export default function TrendChart({ title, points }: TrendChartProps) {
         <thead>
           <tr>
             <th scope="col">Period</th>
-            <th scope="col">Spend</th>
+            <th scope="col">{valueLabel}</th>
           </tr>
         </thead>
         <tbody>
           {points.map((point) => (
             <tr key={point.periodStart}>
               <td>{formatShortDate(point.periodStart)}</td>
-              <td>{formatPaise(point.valuePaise)}</td>
+              <td>{formatValue(point.value)}</td>
             </tr>
           ))}
         </tbody>

@@ -334,3 +334,48 @@ export async function getBudgetSuggestions(month: string): Promise<BudgetSuggest
   }
   return response.json()
 }
+
+export interface CalorieTrendPoint {
+  period_start: string
+  estimate_kcal: number
+}
+
+/** Response contract for `GET /api/v1/calories` (docs/architecture/features/7-calorie-estimation.md §6). */
+export interface CaloriesResponse {
+  generated_at: string
+  has_data: boolean
+  totals: {
+    this_week_estimate_kcal: number
+    this_month_estimate_kcal: number
+  }
+  trend: {
+    weekly: CalorieTrendPoint[]
+  }
+}
+
+/** Fetches this user's calorie totals + weekly trend (FR-6 AC-2). */
+export async function getCalories(): Promise<CaloriesResponse> {
+  const response = await apiFetch('/calories')
+  if (!response.ok) {
+    throw new ApiError('Failed to load calorie estimates', response.status)
+  }
+  return response.json()
+}
+
+/** Response contract for `GET /api/v1/calories/commentary` — always a normal 200, even on a guard fallback. */
+export interface CaloriesCommentaryResponse {
+  blurb: string
+}
+
+/**
+ * Lazily fetches the weekly playful blurb. Callers should call this only
+ * after the rollup above has rendered (ADR-0008 §5's latency isolation) —
+ * a slow or failing LLM round-trip must never block totals/trend.
+ */
+export async function getCaloriesCommentary(): Promise<CaloriesCommentaryResponse> {
+  const response = await apiFetch('/calories/commentary')
+  if (!response.ok) {
+    throw new ApiError('Failed to load commentary', response.status)
+  }
+  return response.json()
+}

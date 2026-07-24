@@ -8,3 +8,15 @@ export function formatPaise(paise: number): string {
 export function formatShortDate(isoDate: string): string {
   return new Date(isoDate).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
 }
+
+/**
+ * Formats an integer kcal figure with a leading "~" and unit, e.g.
+ * `formatKcalEstimate(1234)` -> "~1,234 kcal". Every calorie figure FR-6
+ * renders is LLM-estimated, never measured — this prefix is the one
+ * consistent "estimate" marker applied everywhere a kcal number is shown
+ * (FR-6.3/AC-3), including inside SVG `<text>`/`<title>` and the
+ * screen-reader trend table, where a wrapping badge component can't render.
+ */
+export function formatKcalEstimate(kcal: number): string {
+  return `~${kcal.toLocaleString('en-IN')} kcal`
+}
