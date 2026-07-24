@@ -59,6 +59,13 @@ backend/
                       rows (no I/O) — see ADR-0006
     llm/
       agent.py        LangChain agent(s) over the canonical schema
+    digest/
+      cron.py         weekly digest cron entrypoint, enumerates every
+                      user_id with a current-month budgets row (service-
+                      role — see ADR-0002/ADR-0007 §3)
+      render.py       pure function: canonical-schema rows in, digest
+                      HTML out — no I/O, no LLM call
+      send.py         Supabase GoTrue admin email lookup + Resend send
   tests/
     unit/
     integration/
@@ -112,7 +119,13 @@ talks to the canonical schema or the generic OAuth engine.
 5. **Reads** (dashboard, NL query, budgets, calories, recommendations):
    backend reads the canonical schema scoped to the authenticated user. See
    ADR-0002 for how RLS is enforced on these reads vs. the service-role
-   writes used by linking/sync.
+   writes used by linking/sync. ADR-0002's service-role confinement list —
+   originally `sync/` and `oauth/`, both system-initiated paths with no
+   browser-present user JWT to forward — is extended by ADR-0007 §3 to
+   `{sync/, oauth/, digest/}`: the weekly digest cron enumerates every
+   user_id with a current-month budget cap and reads their orders the same
+   no-user-JWT way `sync/cron.py` does, with every service-role query still
+   explicitly scoped by `user_id`.
 6. **NL query** (FR-4): `POST /api/v1/query` (user-JWT mode only, never
    service-role) → `llm/agent.py` runs a capped LangChain tool-calling loop
    over the fixed read-only tool set in `llm/tools.py` → the returned
@@ -192,3 +205,8 @@ See `docs/architecture/decisions/`:
 - [ADR-0006](decisions/0006-dashboard-aggregation-in-python.md) — dashboard
   and analytics aggregation computed in Python over PostgREST rows, not DB
   views or RPCs; shared `analytics/aggregate.py` for FR-3/FR-4/FR-5.
+- [ADR-0007](decisions/0007-budget-progress-suggestions-and-digest.md) —
+  budget cut-suggestions as one additional `llm/tools.py` function reusing
+  ADR-0003's grounding guard unmodified, `GET /api/v1/budgets/suggestions`
+  as its own lazily-called route, and the weekly digest (Resend) extending
+  ADR-0002's service-role confinement to `digest/`.
