@@ -241,3 +241,56 @@ def test_fetch_orders_returns_empty_list_when_no_addresses():
 
     assert orders == []
     assert calls == [(_BASE_URL, _ACCESS_TOKEN, "get_addresses", {})]
+
+
+def _menu_hit(**overrides) -> dict:
+    fields = {
+        "name": "Chicken Biryani",
+        "price": "₹250",
+        "restaurantId": "1",
+        "restaurantName": "Biryani House",
+    }
+    fields.update(overrides)
+    return fields
+
+
+def _search_menu_client(result: dict):
+    calls: list[tuple[str, str, str, dict]] = []
+
+    def client(base_url, access_token, tool_name, params):
+        calls.append((base_url, access_token, tool_name, params))
+        if tool_name == "search_menu":
+            return result
+        raise AssertionError(f"unexpected tool call: {tool_name}")
+
+    return client, calls
+
+
+def test_search_menu_sends_the_query_and_parses_formatted_money():
+    client, calls = _search_menu_client({"results": [_menu_hit()]})
+
+    items = swiggy_food.search_menu(client, _BASE_URL, _ACCESS_TOKEN, "biryani")
+
+    assert calls == [(_BASE_URL, _ACCESS_TOKEN, "search_menu", {"query": "biryani"})]
+    assert len(items) == 1
+    assert items[0].name == "Chicken Biryani"
+    assert items[0].unit_price_paise == 25000
+    assert items[0].raw == _menu_hit()
+
+
+def test_search_menu_builds_restaurant_redirect_url_from_platform_shape():
+    client, _ = _search_menu_client(
+        {"results": [_menu_hit(restaurantId="9", restaurantName="Truffles")]}
+    )
+
+    items = swiggy_food.search_menu(client, _BASE_URL, _ACCESS_TOKEN, "biryani")
+
+    assert items[0].redirect_url == "https://www.swiggy.com/restaurants/truffles-rest9"
+
+
+def test_search_menu_returns_empty_list_when_no_results():
+    client, _ = _search_menu_client({"results": []})
+
+    items = swiggy_food.search_menu(client, _BASE_URL, _ACCESS_TOKEN, "xyz")
+
+    assert items == []

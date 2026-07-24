@@ -168,9 +168,129 @@ def test_fetch_orders_empty_history_makes_no_detail_calls():
     assert calls == ["list_order_history"]
 
 
-def test_zepto_adapter_only_calls_the_two_read_only_history_tools():
-    # NFR-1 (BRD §2.10): this file must call exactly the two read-only
-    # history tools named in AC-11 and no other MCP tool name.
+def test_zepto_adapter_only_calls_read_only_tools():
+    # NFR-1 (BRD §2.10): this file must call exactly the read-only tools it
+    # documents (history sync plus the FR-7 recommendation wrappers) and no
+    # other MCP tool name.
     source = inspect.getsource(zepto)
     tool_names = re.findall(r'call_tool\(\s*[^,]+,\s*[^,]+,\s*"([^"]+)"', source)
-    assert tool_names == ["list_order_history", "get_order_detail"]
+    assert tool_names == [
+        "list_order_history",
+        "get_order_detail",
+        "get_past_order_items",
+        "search_products",
+    ]
+
+
+def _usual_item(**overrides) -> dict:
+    fields = {
+        "productVariantId": "pv1",
+        "name": "Milk",
+        "frequencyRank": 1,
+        "price": 6000,
+    }
+    fields.update(overrides)
+    return fields
+
+
+def _search_hit(**overrides) -> dict:
+    fields = {
+        "productVariantId": "pv2",
+        "name": "Toned Milk 1L",
+        "price": 5500,
+    }
+    fields.update(overrides)
+    return fields
+
+
+def _tool_transport(result_by_tool: dict) -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        tool_name = body["params"]["name"]
+        result = result_by_tool[tool_name]
+        return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": result})
+
+    return httpx.MockTransport(handler)
+
+
+def test_get_usual_items_normalizes_frequency_ranking_and_join_key():
+    transport = _tool_transport({"get_past_order_items": {"items": [_usual_item()]}})
+
+    items = zepto.get_usual_items(transport, "https://mcp.zepto.co.in", "access-token")
+
+    assert len(items) == 1
+    item = items[0]
+    assert item.product_variant_id == "pv1"
+    assert item.name == "Milk"
+    assert item.frequency_rank == 1
+    assert item.unit_price_paise == 6000
+
+
+def test_get_usual_items_builds_zepto_product_redirect_url():
+    transport = _tool_transport(
+        {
+            "get_past_order_items": {
+                "items": [_usual_item(name="Toned Milk", productVariantId="pv9")]
+            }
+        }
+    )
+
+    items = zepto.get_usual_items(transport, "https://mcp.zepto.co.in", "access-token")
+
+    assert items[0].redirect_url == "https://www.zeptonow.com/pn/toned-milk/pvid/pv9"
+
+
+def test_get_usual_items_returns_empty_list_when_no_items():
+    transport = _tool_transport({"get_past_order_items": {"items": []}})
+
+    items = zepto.get_usual_items(transport, "https://mcp.zepto.co.in", "access-token")
+
+    assert items == []
+
+
+def test_search_products_sends_the_query_and_normalizes_results():
+    calls: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        calls.append(body["params"]["arguments"])
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {"results": [_search_hit()]},
+            },
+        )
+
+    items = zepto.search_products(
+        httpx.MockTransport(handler), "https://mcp.zepto.co.in", "access-token", "milk"
+    )
+
+    assert calls == [{"query": "milk"}]
+    assert len(items) == 1
+    assert items[0].name == "Toned Milk 1L"
+    assert items[0].unit_price_paise == 5500
+    assert items[0].raw == _search_hit()
+
+
+def test_search_products_builds_redirect_url_from_platform_shape():
+    transport = _tool_transport(
+        {
+            "search_products": {
+                "results": [_search_hit(name="Amul Butter 100g", productVariantId="pv7")]
+            }
+        }
+    )
+
+    items = zepto.search_products(transport, "https://mcp.zepto.co.in", "access-token", "butter")
+
+    assert items[0].redirect_url == "https://www.zeptonow.com/pn/amul-butter-100g/pvid/pv7"
+
+
+def test_search_products_returns_empty_list_when_no_results():
+    transport = _tool_transport({"search_products": {"results": []}})
+
+    items = zepto.search_products(transport, "https://mcp.zepto.co.in", "access-token", "xyz")
+
+    assert items == []
