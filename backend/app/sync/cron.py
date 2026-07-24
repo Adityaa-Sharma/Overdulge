@@ -78,8 +78,9 @@ def run_sync_for_account(
             status="syncing",
             syncing_since=now,
         )
-        access_token = _resolve_access_token(
+        access_token = engine.resolve_access_token(
             client,
+            _PLATFORM_CONFIGS[platform],
             user_id=user_id,
             platform=platform,
             tokens_encrypted=linked_account["tokens_encrypted"],
@@ -155,37 +156,6 @@ def run_daily_sync(*, transport: httpx.BaseTransport | None = None) -> list[Sync
         return [run_sync_for_account(client, account, transport=transport) for account in accounts]
     finally:
         client.close()
-
-
-def _resolve_access_token(
-    client: PostgrestClient,
-    *,
-    user_id: str,
-    platform: str,
-    tokens_encrypted: str,
-    transport: httpx.BaseTransport | None,
-) -> str:
-    token_set = engine.decode_tokens(tokens_encrypted)
-    if not _is_expired(token_set.expires_at):
-        return token_set.access_token
-
-    config = _PLATFORM_CONFIGS[platform]
-    refreshed = engine.refresh_tokens(
-        config, refresh_token=token_set.refresh_token, transport=transport
-    )
-    linked_accounts.set_tokens(
-        client,
-        user_id=user_id,
-        platform=platform,
-        tokens_encrypted=engine.encode_tokens(refreshed),
-    )
-    return refreshed.access_token
-
-
-def _is_expired(expires_at: str | None) -> bool:
-    if not expires_at:
-        return False
-    return datetime.fromisoformat(expires_at) <= datetime.now(UTC)
 
 
 # Each MCP surface is served at its own path under the platform host, not at

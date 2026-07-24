@@ -1,7 +1,7 @@
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import budgets, dashboard, health, links, me, sync
+from app.api import budgets, dashboard, health, links, me, recommendations, sync
 from app.core.auth import get_current_user
 from app.core.config import get_settings
 
@@ -37,3 +37,6 @@ app.include_router(links.router, prefix="/api/v1")
 app.include_router(budgets.router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
 app.include_router(dashboard.router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
 app.include_router(sync.router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
+app.include_router(
+    recommendations.router, prefix="/api/v1", dependencies=[Depends(get_current_user)]
+)

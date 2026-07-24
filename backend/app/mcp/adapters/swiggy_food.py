@@ -19,6 +19,10 @@ path from order-history sync above: a live, per-request menu search whose
 results are never cached or persisted (ADR-0004 §2). `redirect_url` is built
 here from Swiggy's own restaurant-page URL shape — platform-specific
 knowledge that must not leak into route code (SYSTEM.md §2).
+
+`usual_redirect_url` (FR-7.1, issue #40) backs the computed Food usuals
+ranking's redirect target — see its own docstring for why it cannot use the
+same restaurant-page shape as `search_menu`'s results.
 """
 
 from __future__ import annotations
@@ -27,6 +31,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
+from urllib.parse import quote
 
 from app.mcp.recommendations import SearchResultItem, slugify
 from app.sync.normalize import NormalizedOrder
@@ -38,6 +43,7 @@ McpCaller = Callable[[str, str, str, dict[str, Any]], dict[str, Any]]
 
 _CANCELLED_STATUSES = {"CANCELLED"}
 _RESTAURANT_URL = "https://www.swiggy.com/restaurants/{slug}-rest{restaurant_id}"
+_SEARCH_URL = "https://www.swiggy.com/search?query={query}"
 
 # Swiggy Food's detail timestamps are wall-clock IST with no offset
 # (e.g. "2022-03-21 22:32:11"); the platform is India-only. Instamart, by
@@ -171,3 +177,18 @@ def _restaurant_redirect_url(item: dict[str, Any]) -> str:
     """
     restaurant_name = item.get("restaurantName") or item["name"]
     return _RESTAURANT_URL.format(slug=slugify(restaurant_name), restaurant_id=item["restaurantId"])
+
+
+def usual_redirect_url(item_name: str) -> str:
+    """Redirect target for a computed Food usuals item (FR-7.1, issue #40).
+
+    Order-history sync (`get_food_orders`/`get_food_order_details`) never
+    returns a `restaurantId` — only `search_menu` results do (see
+    `_restaurant_redirect_url` above) — so a usual grouped from synced
+    `order_items` has no id to build a direct restaurant-page link from, and
+    a usual's order history can also span more than one restaurant. Falls
+    back to Swiggy's own search-results page for the item name: still a
+    redirect to the platform's own site (FR-7.3), just not a direct deep
+    link.
+    """
+    return _SEARCH_URL.format(query=quote(item_name))
