@@ -225,6 +225,66 @@ def test_top_items_respects_limit():
     assert result[0]["name"] == "Bread"
 
 
+# --- top_items_in_category --------------------------------------------------
+
+
+def test_top_items_in_category_narrows_to_matching_category():
+    orders = [_order(id="o1"), _order(id="o2"), _order(id="o3")]
+    items = [
+        _item(order_id="o1", name="Milk", quantity=2, unit_price_paise=3000, category="grocery"),
+        _item(order_id="o2", name="Milk", quantity=1, unit_price_paise=3000, category="grocery"),
+        _item(order_id="o3", name="Pizza", quantity=1, unit_price_paise=9000, category="food"),
+    ]
+    transport = _fake_postgrest(orders, items)
+
+    result = tools.top_items_in_category(
+        "jwt", "2026-05-01", "2026-05-31", "grocery", transport=transport
+    )
+
+    assert result == [{"name": "Milk", "order_count": 2, "total_paise": 9000}]
+
+
+def test_top_items_in_category_with_no_category_behaves_like_top_items():
+    orders = [_order(id="o1"), _order(id="o2")]
+    items = [
+        _item(order_id="o1", name="Milk", quantity=1, unit_price_paise=3000, category="grocery"),
+        _item(order_id="o2", name="Pizza", quantity=1, unit_price_paise=9000, category="food"),
+    ]
+    transport = _fake_postgrest(orders, items)
+
+    result = tools.top_items_in_category("jwt", "2026-05-01", "2026-05-31", transport=transport)
+
+    assert result == tools.top_items("jwt", "2026-05-01", "2026-05-31", transport=transport)
+
+
+def test_top_items_in_category_returns_empty_for_uncategorized_data():
+    orders = [_order(id="o1")]
+    items = [_item(order_id="o1", name="Milk", quantity=1, unit_price_paise=3000, category=None)]
+    transport = _fake_postgrest(orders, items)
+
+    result = tools.top_items_in_category(
+        "jwt", "2026-05-01", "2026-05-31", "grocery", transport=transport
+    )
+
+    assert result == []
+
+
+def test_top_items_in_category_respects_limit():
+    orders = [_order(id="o1"), _order(id="o2")]
+    items = [
+        _item(order_id="o1", name="Milk", quantity=1, unit_price_paise=3000, category="grocery"),
+        _item(order_id="o2", name="Bread", quantity=1, unit_price_paise=4000, category="grocery"),
+    ]
+    transport = _fake_postgrest(orders, items)
+
+    result = tools.top_items_in_category(
+        "jwt", "2026-05-01", "2026-05-31", "grocery", limit=1, transport=transport
+    )
+
+    assert len(result) == 1
+    assert result[0]["name"] == "Bread"
+
+
 # --- data_coverage ---------------------------------------------------------
 
 
