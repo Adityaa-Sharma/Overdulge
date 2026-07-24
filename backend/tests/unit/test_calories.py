@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.llm import calories
+from app.llm import calories, tone_guard
 
 
 class FakeChatModel:
@@ -81,3 +81,38 @@ def test_estimate_calories_returns_none_for_negative_response():
 def test_estimate_calories_never_raises_on_garbage_response():
     model = FakeChatModel([""])
     assert calories.estimate_calories("Empty reply item", chat_model=model) is None
+
+
+def test_generate_weekly_blurb_returns_clean_grounded_response():
+    model = FakeChatModel(["12 orders, ₹1,234.00 spent, ~3,500 kcal estimated this week — busy!"])
+
+    blurb = calories.generate_weekly_blurb(
+        week_kcal_estimate=3500, week_order_count=12, week_spend_paise=123400, chat_model=model
+    )
+
+    assert blurb == "12 orders, ₹1,234.00 spent, ~3,500 kcal estimated this week — busy!"
+    assert model.invoke_count == 1
+
+
+def test_generate_weekly_blurb_falls_back_when_number_is_ungrounded():
+    model = FakeChatModel(
+        ["You ordered way more than usual — like ₹9,999 worth!", "still ₹9,999 somehow"]
+    )
+
+    blurb = calories.generate_weekly_blurb(
+        week_kcal_estimate=3500, week_order_count=12, week_spend_paise=123400, chat_model=model
+    )
+
+    assert blurb == tone_guard.FALLBACK_BLURB
+    assert model.invoke_count == 2
+
+
+def test_generate_weekly_blurb_falls_back_when_tone_guard_rejects_body_language():
+    model = FakeChatModel(["12 orders — maybe time to lose weight and eat less!"])
+
+    blurb = calories.generate_weekly_blurb(
+        week_kcal_estimate=3500, week_order_count=12, week_spend_paise=123400, chat_model=model
+    )
+
+    assert blurb == tone_guard.FALLBACK_BLURB
+    assert model.invoke_count == 1
