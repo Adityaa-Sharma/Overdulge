@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import (
     budgets,
     budgets_suggestions,
+    calories,
     dashboard,
     health,
     links,
@@ -49,6 +50,7 @@ app.include_router(
     budgets_suggestions.router, prefix="/api/v1", dependencies=[Depends(get_current_user)]
 )
 app.include_router(dashboard.router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
+app.include_router(calories.router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
 app.include_router(sync.router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
 app.include_router(
     recommendations.router, prefix="/api/v1", dependencies=[Depends(get_current_user)]

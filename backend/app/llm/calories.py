@@ -12,6 +12,11 @@ number from training data — and returns `None` (never a guess) for
 unparseable or implausible output. Both functions are the concrete
 interface FR-7's #41 imports verbatim (ADR-0004) — do not fork either one
 for a second caller.
+
+`generate_weekly_blurb` follows the same fait-accompli pattern as
+`llm/budget_suggestions.py` (ADR-0003, reused unmodified from `llm/agent.py`)
+and adds `llm/tone_guard.py::check_tone` as a second guard, per ADR-0008 §5 —
+either guard failing falls back to `tone_guard.FALLBACK_BLURB`.
 """
 
 from __future__ import annotations
@@ -25,7 +30,8 @@ from typing import Any
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage
 
-from app.llm.agent import _default_chat_model
+from app.llm import tone_guard
+from app.llm.agent import _default_chat_model, format_inr, generate_grounded_sentence
 
 MAX_PLAUSIBLE_KCAL = 5000
 
@@ -106,3 +112,44 @@ def estimate_calories(item_name: str, *, chat_model: BaseChatModel | None = None
     response = model.invoke([HumanMessage(content=_prompt(item_name))])
     text = response.content if isinstance(response.content, str) else str(response.content)
     return _parse_kcal(text)
+
+
+def _weekly_blurb_prompt(fact_summary: str) -> str:
+    return (
+        f"You computed: {fact_summary}.\n"
+        "Write exactly one short, playful sentence about the user's ordering "
+        "habits or spending this week, referencing the figures above. Stay "
+        "playful about ordering habits and money only — never mention body "
+        "weight, dieting, or health. Use only the figures above — do not "
+        "compute, restate, or guess any other number."
+    )
+
+
+def generate_weekly_blurb(
+    *,
+    week_kcal_estimate: int,
+    week_order_count: int,
+    week_spend_paise: int,
+    chat_model: BaseChatModel | None = None,
+) -> str:
+    """One playful sentence about this week's ordering habits/spending,
+    grounded in the already-computed figures (fait-accompli prompt, ADR-0003
+    pattern reused from `llm/agent.py`). Runs the numeric-grounding guard
+    then `tone_guard.check_tone`; either failing falls back to
+    `tone_guard.FALLBACK_BLURB` (ADR-0008 §5) — never body/weight/dieting
+    language, never a number the caller didn't hand in.
+    """
+    model = chat_model if chat_model is not None else _default_chat_model()
+    noun = "order" if week_order_count == 1 else "orders"
+    spend = format_inr(week_spend_paise)
+    fact_summary = (
+        f"{week_order_count} {noun} this week, {spend} spent, ~{week_kcal_estimate} kcal estimated"
+    )
+    allowed_values: list[object] = [week_order_count, spend, week_kcal_estimate]
+    sentence = generate_grounded_sentence(
+        model,
+        _weekly_blurb_prompt(fact_summary),
+        allowed_values,
+        fallback=tone_guard.FALLBACK_BLURB,
+    )
+    return sentence if tone_guard.check_tone(sentence) else tone_guard.FALLBACK_BLURB
