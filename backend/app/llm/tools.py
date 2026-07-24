@@ -158,6 +158,24 @@ def spend_by_platform(
     return [{"platform": platform, "total_paise": total_paise} for platform, total_paise in ranked]
 
 
+def _rank_items_by_spend(items: list[Row], limit: int) -> list[dict[str, Any]]:
+    totals: dict[str, int] = {}
+    orders_by_name: dict[str, set[str]] = {}
+    for item in items:
+        name = item.get("name")
+        if not name:
+            continue
+        amount = (item.get("quantity") or 0) * (item.get("unit_price_paise") or 0)
+        totals[name] = totals.get(name, 0) + amount
+        orders_by_name.setdefault(name, set()).add(item["order_id"])
+
+    ranked = sorted(totals.items(), key=lambda entry: entry[1], reverse=True)[:limit]
+    return [
+        {"name": name, "order_count": len(orders_by_name[name]), "total_paise": total_paise}
+        for name, total_paise in ranked
+    ]
+
+
 def top_items(
     jwt: str,
     start_date: str,
@@ -178,21 +196,34 @@ def top_items(
     finally:
         client.close()
 
-    totals: dict[str, int] = {}
-    orders_by_name: dict[str, set[str]] = {}
-    for item in items:
-        name = item.get("name")
-        if not name:
-            continue
-        amount = (item.get("quantity") or 0) * (item.get("unit_price_paise") or 0)
-        totals[name] = totals.get(name, 0) + amount
-        orders_by_name.setdefault(name, set()).add(item["order_id"])
+    return _rank_items_by_spend(items, limit)
 
-    ranked = sorted(totals.items(), key=lambda entry: entry[1], reverse=True)[:limit]
-    return [
-        {"name": name, "order_count": len(orders_by_name[name]), "total_paise": total_paise}
-        for name, total_paise in ranked
-    ]
+
+def top_items_in_category(
+    jwt: str,
+    start_date: str,
+    end_date: str,
+    category: str | None = None,
+    limit: int = 5,
+    *,
+    transport: httpx.BaseTransport | None = None,
+) -> list[dict[str, Any]]:
+    """The `limit` highest-spend item names in `[start_date, end_date]`,
+    narrowed to `order_items.category == category`. `category=None` behaves
+    exactly like `top_items` (ADR-0007 §1). Same ranking/`order_count`
+    semantics as `top_items`.
+    """
+    client = user_client(jwt, transport=transport)
+    try:
+        orders = _orders_in_range(_fetch_orders(client), start_date, end_date)
+        items = _fetch_items_for_orders(client, orders)
+    finally:
+        client.close()
+
+    if category is not None:
+        items = [item for item in items if item.get("category") == category]
+
+    return _rank_items_by_spend(items, limit)
 
 
 def data_coverage(
