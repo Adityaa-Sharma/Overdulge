@@ -238,6 +238,32 @@ def encode_tokens(token_set: TokenSet) -> str:
     return crypto.encrypt(json.dumps(payload).encode("utf-8"))
 
 
+def resolve_access_token(
+    client: db.PostgrestClient,
+    config: PlatformConfig,
+    *,
+    user_id: str,
+    platform: str,
+    tokens_encrypted: str,
+    transport: httpx.BaseTransport | None = None,
+) -> str:
+    """Decodes a `linked_accounts` row's stored tokens, transparently
+    refreshing (and persisting the rotated set via `client`) when the access
+    token has expired. Shared by `sync/cron.py` and `api/recommendations.py`
+    — every call site that needs a live platform access token goes through
+    here rather than re-implementing the refresh-and-persist sequence.
+    """
+    token_set = decode_tokens(tokens_encrypted)
+    if not _is_expired(token_set.expires_at):
+        return token_set.access_token
+
+    refreshed = refresh_tokens(config, refresh_token=token_set.refresh_token, transport=transport)
+    linked_accounts.set_tokens(
+        client, user_id=user_id, platform=platform, tokens_encrypted=encode_tokens(refreshed)
+    )
+    return refreshed.access_token
+
+
 def _redirect_uri(platform: str) -> str:
     settings = get_settings()
     if not settings.backend_base_url:

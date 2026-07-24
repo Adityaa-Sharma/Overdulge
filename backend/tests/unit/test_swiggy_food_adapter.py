@@ -294,3 +294,19 @@ def test_search_menu_returns_empty_list_when_no_results():
     items = swiggy_food.search_menu(client, _BASE_URL, _ACCESS_TOKEN, "xyz")
 
     assert items == []
+
+
+def test_usual_redirect_url_builds_a_search_results_link():
+    # Food usuals have no restaurantId (only search_menu results carry one),
+    # so the redirect falls back to Swiggy's own search page for the item name.
+    assert (
+        swiggy_food.usual_redirect_url("Chicken Biryani")
+        == "https://www.swiggy.com/search?query=Chicken%20Biryani"
+    )
+
+
+def test_usual_redirect_url_percent_encodes_special_characters():
+    assert (
+        swiggy_food.usual_redirect_url("Paneer & Peas")
+        == "https://www.swiggy.com/search?query=Paneer%20%26%20Peas"
+    )
