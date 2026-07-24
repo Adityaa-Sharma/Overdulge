@@ -203,3 +203,77 @@ def test_fetch_orders_returns_empty_list_when_no_orders():
     orders = swiggy_instamart.fetch_orders(client, "https://mcp.swiggy.com/im", "token")
 
     assert orders == []
+
+
+def _usual_item(**overrides) -> dict:
+    fields = {"itemId": "im-item-1", "name": "Bananas", "frequencyRank": 1, "price": 40}
+    fields.update(overrides)
+    return fields
+
+
+def _search_hit(**overrides) -> dict:
+    fields = {"itemId": "im-item-2", "name": "Robusta Bananas 1kg", "price": 45}
+    fields.update(overrides)
+    return fields
+
+
+def test_get_usual_items_normalizes_frequency_ranking_and_native_join_key():
+    client, calls = _make_client({"items": [_usual_item()]})
+
+    items = swiggy_instamart.get_usual_items(client, "https://mcp.swiggy.com/im", "token")
+
+    assert len(items) == 1
+    item = items[0]
+    assert item.item_id == "im-item-1"
+    assert item.name == "Bananas"
+    assert item.frequency_rank == 1
+    assert item.unit_price_paise == 4000
+    base_url, access_token, tool_name, params = calls[0]
+    assert tool_name == "your_go_to_items"
+    assert params == {}
+
+
+def test_get_usual_items_builds_instamart_item_redirect_url():
+    client, _ = _make_client({"items": [_usual_item(itemId="im-item-9")]})
+
+    items = swiggy_instamart.get_usual_items(client, "https://mcp.swiggy.com/im", "token")
+
+    assert items[0].redirect_url == "https://www.swiggy.com/instamart/item/im-item-9"
+
+
+def test_get_usual_items_returns_empty_list_when_no_items():
+    client, _ = _make_client({"items": []})
+
+    items = swiggy_instamart.get_usual_items(client, "https://mcp.swiggy.com/im", "token")
+
+    assert items == []
+
+
+def test_search_products_sends_the_query_and_converts_rupees_to_paise():
+    client, calls = _make_client({"results": [_search_hit(price=45)]})
+
+    items = swiggy_instamart.search_products(client, "https://mcp.swiggy.com/im", "token", "banana")
+
+    _, _, tool_name, params = calls[0]
+    assert tool_name == "search_products"
+    assert params == {"query": "banana"}
+    assert len(items) == 1
+    assert items[0].name == "Robusta Bananas 1kg"
+    assert items[0].unit_price_paise == 4500
+    assert items[0].raw == _search_hit(price=45)
+
+
+def test_search_products_builds_redirect_url_from_platform_shape():
+    client, _ = _make_client({"results": [_search_hit(itemId="im-item-7")]})
+
+    items = swiggy_instamart.search_products(client, "https://mcp.swiggy.com/im", "token", "banana")
+
+    assert items[0].redirect_url == "https://www.swiggy.com/instamart/item/im-item-7"
+
+
+def test_search_products_returns_empty_list_when_no_results():
+    client, _ = _make_client({"results": []})
+
+    items = swiggy_instamart.search_products(client, "https://mcp.swiggy.com/im", "token", "xyz")
+
+    assert items == []
