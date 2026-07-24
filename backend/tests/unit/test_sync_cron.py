@@ -1,6 +1,7 @@
 import base64
 import json
 from collections import defaultdict
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -9,6 +10,7 @@ from app.core import crypto, db
 from app.core.config import Settings, get_settings
 from app.oauth import engine
 from app.sync import cron
+from app.sync.normalize import NormalizedOrder
 
 _TEST_KEY = base64.b64encode(b"0" * 32).decode("ascii")
 _FUTURE = "2099-01-01T00:00:00+00:00"
@@ -87,11 +89,17 @@ def _filter_rows(rows: list[dict], params: httpx.QueryParams) -> list[dict]:
     for row in rows:
         matches = True
         for key, value in params.items():
-            if key in ("select", "on_conflict") or not value.startswith("eq."):
+            if key in ("select", "on_conflict"):
                 continue
-            if str(row.get(key)) != value[len("eq.") :]:
-                matches = False
-                break
+            if value.startswith("eq."):
+                if str(row.get(key)) != value[len("eq.") :]:
+                    matches = False
+                    break
+            elif value.startswith("in.("):
+                ids = value[len("in.(") : -1].split(",") if value != "in.()" else []
+                if str(row.get(key)) not in ids:
+                    matches = False
+                    break
         if matches:
             result.append(row)
     return result
@@ -438,3 +446,150 @@ def test_failing_account_does_not_stop_daily_sync_loop(fake_postgrest):
     assert by_user["user-bad"].success is False
     assert by_user["user-good"].success is True
     assert by_user["user-good"].orders_captured == {"zepto": 1}
+
+
+# --- Ingest-time calorie estimation hook (issue #81, ADR-0008 §3) ---------
+
+
+def _batch_order(platform_order_id: str) -> NormalizedOrder:
+    return NormalizedOrder(
+        platform_order_id=platform_order_id,
+        status="DELIVERED",
+        is_cancelled=False,
+        ordered_at=datetime(2026, 2, 1, tzinfo=UTC),
+        grand_total_paise=1000,
+        raw={},
+    )
+
+
+def _seed_order(fake_postgrest, *, order_id, platform, platform_order_id, user_id="user-1"):
+    fake_postgrest.tables["orders"].append(
+        {
+            "id": order_id,
+            "user_id": user_id,
+            "platform": platform,
+            "platform_order_id": platform_order_id,
+        }
+    )
+
+
+def _seed_item(fake_postgrest, *, item_id, order_id, name, category=None, calorie_estimate=None):
+    fake_postgrest.tables["order_items"].append(
+        {
+            "id": item_id,
+            "order_id": order_id,
+            "name": name,
+            "category": category,
+            "calorie_estimate": calorie_estimate,
+        }
+    )
+
+
+def test_estimate_batch_groups_shared_name_into_one_estimator_call(fake_postgrest, monkeypatch):
+    _seed_order(fake_postgrest, order_id="order-1", platform="zepto", platform_order_id="z1")
+    _seed_item(fake_postgrest, item_id="item-1", order_id="order-1", name="Idli", category="snacks")
+    _seed_item(
+        fake_postgrest, item_id="item-2", order_id="order-1", name="idli ", category="snacks"
+    )
+    calls: list[str] = []
+    monkeypatch.setattr(
+        cron.llm_calories, "estimate_calories", lambda name: calls.append(name) or 200
+    )
+
+    cron._estimate_calories_for_batch(
+        db.service_role_client(), user_id="user-1", platform="zepto", orders=[_batch_order("z1")]
+    )
+
+    assert calls == ["idli"]
+    items = {row["id"]: row for row in fake_postgrest.tables["order_items"]}
+    assert items["item-1"]["calorie_estimate"] == 200
+    assert items["item-2"]["calorie_estimate"] == 200
+
+
+def test_estimate_batch_never_passes_ineligible_grocery_item_to_estimator(
+    fake_postgrest, monkeypatch
+):
+    _seed_order(fake_postgrest, order_id="order-1", platform="zepto", platform_order_id="z1")
+    _seed_item(
+        fake_postgrest, item_id="item-1", order_id="order-1", name="Tomatoes", category="vegetables"
+    )
+    calls: list[str] = []
+    monkeypatch.setattr(
+        cron.llm_calories, "estimate_calories", lambda name: calls.append(name) or 200
+    )
+
+    cron._estimate_calories_for_batch(
+        db.service_role_client(), user_id="user-1", platform="zepto", orders=[_batch_order("z1")]
+    )
+
+    assert calls == []
+    assert fake_postgrest.tables["order_items"][0]["calorie_estimate"] is None
+
+
+def test_estimate_batch_never_re_estimates_a_row_that_already_has_an_estimate(
+    fake_postgrest, monkeypatch
+):
+    _seed_order(fake_postgrest, order_id="order-1", platform="zepto", platform_order_id="z1")
+    _seed_item(
+        fake_postgrest,
+        item_id="item-1",
+        order_id="order-1",
+        name="Idli",
+        category="snacks",
+        calorie_estimate=150,
+    )
+    calls: list[str] = []
+    monkeypatch.setattr(
+        cron.llm_calories, "estimate_calories", lambda name: calls.append(name) or 999
+    )
+
+    cron._estimate_calories_for_batch(
+        db.service_role_client(), user_id="user-1", platform="zepto", orders=[_batch_order("z1")]
+    )
+
+    assert calls == []
+    assert fake_postgrest.tables["order_items"][0]["calorie_estimate"] == 150
+
+
+def test_estimate_batch_swiggy_food_item_is_always_eligible_regardless_of_category(
+    fake_postgrest, monkeypatch
+):
+    _seed_order(fake_postgrest, order_id="order-1", platform="swiggy_food", platform_order_id="f1")
+    _seed_item(
+        fake_postgrest, item_id="item-1", order_id="order-1", name="Butter Chicken", category=None
+    )
+    calls: list[str] = []
+    monkeypatch.setattr(
+        cron.llm_calories, "estimate_calories", lambda name: calls.append(name) or 450
+    )
+
+    cron._estimate_calories_for_batch(
+        db.service_role_client(),
+        user_id="user-1",
+        platform="swiggy_food",
+        orders=[_batch_order("f1")],
+    )
+
+    assert calls == ["butter chicken"]
+    assert fake_postgrest.tables["order_items"][0]["calorie_estimate"] == 450
+
+
+def test_run_sync_for_account_wires_the_estimation_hook_after_upsert(fake_postgrest, monkeypatch):
+    account = _seed_linked_account(fake_postgrest, platform="zepto")
+    responses = {
+        "list_order_history": _ZEPTO_RESPONSES["list_order_history"],
+        "get_order_detail": {
+            **_ZEPTO_RESPONSES["get_order_detail"],
+            "items": [{"name": "Chips", "quantity": 1, "category": "snacks"}],
+        },
+    }
+    transport, _ = _oauth_and_mcp_transport(responses)
+    monkeypatch.setattr(cron.llm_calories, "estimate_calories", lambda name: 150)
+    client = db.service_role_client()
+
+    result = cron.run_sync_for_account(client, account, transport=transport)
+
+    assert result.success is True
+    items = fake_postgrest.tables["order_items"]
+    assert len(items) == 1
+    assert items[0]["calorie_estimate"] == 150
