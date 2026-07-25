@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from 'react-router-dom'
+import { Navigate, Outlet } from 'react-router'
 import { useSession } from '../lib/session'
 
 /** Guard for authenticated routes: redirects to /login until a session resolves. */

@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 import AppShell from './components/AppShell'
 import { SessionProvider } from './lib/session'
 import Budgets from './routes/Budgets'

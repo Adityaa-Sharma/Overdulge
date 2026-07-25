@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { getCalories, getCaloriesCommentary, type CaloriesResponse } from '../lib/api'
 import { formatKcalEstimate } from '../lib/format'
 import TrendChart from '../components/charts/TrendChart'

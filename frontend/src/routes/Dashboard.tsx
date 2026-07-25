@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { getDashboard, type DashboardResponse, type SyncPlatform } from '../lib/api'
 import { formatPaise } from '../lib/format'
 import CategoryBreakdownChart from '../components/charts/CategoryBreakdownChart'
