@@ -380,3 +380,84 @@ export async function getCaloriesCommentary(): Promise<CaloriesCommentaryRespons
   }
   return response.json()
 }
+
+/** The three platforms "usuals"/"suggestions" are ranked and grouped by (FR-7). */
+export type RecommendationPlatform = 'zepto' | 'swiggy_instamart' | 'swiggy_food'
+
+/**
+ * One frequent item for a platform (FR-7.1). `frequency_rank_or_count` carries
+ * different semantics per platform (Zepto/Instamart: an ascending rank from
+ * their own pre-aggregated tool; Swiggy Food: a computed order count) — the
+ * backend already returns each platform's list pre-sorted by it, so the
+ * frontend only needs list order, never the raw number, to convey "usual-ness".
+ */
+export interface UsualItem {
+  platform: RecommendationPlatform
+  key: string
+  name: string
+  frequency_rank_or_count: number
+  avg_unit_price_paise: number | null
+  calorie_estimate: number | null
+  redirect_url: string
+}
+
+/** Response contract for `GET /api/v1/recommendations/usuals` (FR-7.1, AC-1). */
+export interface UsualsResponse {
+  zepto: UsualItem[]
+  swiggy_instamart: UsualItem[]
+  swiggy_food: UsualItem[]
+}
+
+/** Fetches this user's ranked usuals per platform. */
+export async function getUsuals(): Promise<UsualsResponse> {
+  const response = await apiFetch('/recommendations/usuals')
+  if (!response.ok) {
+    throw new ApiError('Failed to load your usuals', response.status)
+  }
+  return response.json()
+}
+
+/**
+ * A live cheaper-and/or-lower-calorie alternative for one frequent item
+ * (FR-7.2, ADR-0004 §4). Never stale — the backend fetches this from a live
+ * `search_products`/`search_menu` call per request.
+ */
+export interface SuggestionAlternative {
+  name: string
+  unit_price_paise: number | null
+  calorie_estimate: number | null
+  redirect_url: string
+  cheaper: boolean
+  lower_calorie: boolean
+}
+
+/** One frequent item paired with the best qualifying live alternative for it (AC-3). */
+export interface Suggestion {
+  platform: RecommendationPlatform
+  frequent_item: {
+    key: string
+    name: string
+    avg_unit_price_paise: number | null
+    calorie_estimate: number | null
+  }
+  alternative: SuggestionAlternative
+}
+
+/** Response contract for `GET /api/v1/recommendations/suggestions` (FR-7.2). */
+export interface SuggestionsResponse {
+  suggestions: Suggestion[]
+}
+
+/**
+ * Fetches live alternatives for this user's frequent items. Slower than
+ * `getUsuals` (bounded by the slowest live search call per item, ADR-0004 §2
+ * Consequences) — callers should fetch it lazily after usuals render rather
+ * than blocking on it.
+ */
+export async function getSuggestions(): Promise<SuggestionsResponse> {
+  const response = await apiFetch('/recommendations/suggestions')
+  if (!response.ok) {
+    throw new ApiError('Failed to load suggested alternatives', response.status)
+  }
+  return response.json()
+}
