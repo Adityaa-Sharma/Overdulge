@@ -6,6 +6,7 @@ import Calories from './routes/Calories'
 import Dashboard from './routes/Dashboard'
 import Login from './routes/Login'
 import Query from './routes/Query'
+import Recommendations from './routes/Recommendations'
 import RequireAuth from './routes/RequireAuth'
 import Settings from './routes/Settings'
 
@@ -22,6 +23,7 @@ function App() {
               <Route path="/query" element={<Query />} />
               <Route path="/budgets" element={<Budgets />} />
               <Route path="/calories" element={<Calories />} />
+              <Route path="/recommendations" element={<Recommendations />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
           </Route>
