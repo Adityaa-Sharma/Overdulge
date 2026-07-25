@@ -38,6 +38,7 @@ export default function AppShell() {
           <NavLink to="/query">Ask</NavLink>
           <NavLink to="/budgets">Budgets</NavLink>
           <NavLink to="/calories">Calories</NavLink>
+          <NavLink to="/recommendations">Usuals</NavLink>
           <NavLink to="/settings">Accounts</NavLink>
           <button className="btn-ghost" type="button" onClick={handleLogout} disabled={loggingOut}>
             {loggingOut ? 'Logging out…' : 'Log out'}

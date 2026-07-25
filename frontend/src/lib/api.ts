@@ -380,3 +380,79 @@ export async function getCaloriesCommentary(): Promise<CaloriesCommentaryRespons
   }
   return response.json()
 }
+
+/** The three platforms usuals/recommendations are ranked per (FR-7, ADR-0004 §1). */
+export type RecommendationPlatform = 'zepto' | 'swiggy_instamart' | 'swiggy_food'
+
+/** One frequently-ordered item, ranked within its platform (FR-7.1 AC-1). `key` is the platform's own join key (ADR-0004 §1) — opaque to the frontend. */
+export interface UsualItem {
+  platform: RecommendationPlatform
+  key: string
+  name: string
+  frequency_rank_or_count: number
+  avg_unit_price_paise: number | null
+  calorie_estimate: number | null
+  redirect_url: string
+}
+
+/** Response contract for `GET /api/v1/recommendations/usuals` — one ranked list per platform, already sorted. */
+export interface UsualsResponse {
+  zepto: UsualItem[]
+  swiggy_instamart: UsualItem[]
+  swiggy_food: UsualItem[]
+}
+
+/** Fetches this user's ranked "usuals" per platform (FR-7.1). A platform with no linked account comes back as `[]`. */
+export async function getUsuals(): Promise<UsualsResponse> {
+  const response = await apiFetch('/recommendations/usuals')
+  if (!response.ok) {
+    throw new ApiError('Failed to load your usuals', response.status)
+  }
+  return response.json()
+}
+
+/** A live cheaper and/or lower-calorie candidate for one frequent item (FR-7.2 AC-3). */
+export interface SuggestionAlternative {
+  name: string
+  unit_price_paise: number | null
+  calorie_estimate: number | null
+  redirect_url: string
+  cheaper: boolean
+  lower_calorie: boolean
+}
+
+/** Pairs one frequent item with its best live alternative; `frequent_item.key` joins back to a `UsualItem.key` on the same platform. */
+export interface Suggestion {
+  platform: RecommendationPlatform
+  frequent_item: {
+    key: string
+    name: string
+    avg_unit_price_paise: number | null
+    calorie_estimate: number | null
+  }
+  alternative: SuggestionAlternative
+}
+
+/**
+ * Response contract for `GET /api/v1/recommendations/suggestions`. Items with
+ * no qualifying live alternative are simply absent (AC-5) — never a
+ * placeholder entry — so callers must treat "no entry for this key" as the
+ * normal case, not an error.
+ */
+export interface SuggestionsResponse {
+  suggestions: Suggestion[]
+}
+
+/**
+ * Fetches live cheaper/lower-calorie alternatives for this user's frequent
+ * items (FR-7.2). Nothing here is cached (ADR-0004 §2), so this call is
+ * slower than `getUsuals` and callers should fetch it lazily, after usuals
+ * have already rendered — same pattern as `getCaloriesCommentary`.
+ */
+export async function getSuggestions(): Promise<SuggestionsResponse> {
+  const response = await apiFetch('/recommendations/suggestions')
+  if (!response.ok) {
+    throw new ApiError('Failed to load suggested alternatives', response.status)
+  }
+  return response.json()
+}

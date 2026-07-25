@@ -709,6 +709,20 @@ input:focus {
   font-size: 0.86rem;
 }
 
+/* Inline alternative suggestion nested inside a .link-list row (FR-7.2). */
+.suggestion {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-2);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.suggestion p {
+  margin: 0;
+}
+
 .skeleton,
 .link-list__skeleton {
   height: 78px;
