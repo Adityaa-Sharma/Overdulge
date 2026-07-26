@@ -1,0 +1,27 @@
+{
+  "platform": "swiggy_food",
+  "mcp_endpoint": "https://mcp.swiggy.com/food",
+  "baseline_source": "static extraction from backend/app/mcp/adapters/swiggy_food.py — see tests/contracts/README.md",
+  "tools": [
+    {
+      "name": "get_addresses",
+      "params": [],
+      "used_in": "backend/app/mcp/adapters/swiggy_food.py:55"
+    },
+    {
+      "name": "get_food_orders",
+      "params": ["addressId"],
+      "used_in": "backend/app/mcp/adapters/swiggy_food.py:65"
+    },
+    {
+      "name": "get_food_order_details",
+      "params": ["orderId"],
+      "used_in": "backend/app/mcp/adapters/swiggy_food.py:116"
+    },
+    {
+      "name": "search_menu",
+      "params": ["query"],
+      "used_in": "backend/app/mcp/adapters/swiggy_food.py:160"
+    }
+  ]
+}

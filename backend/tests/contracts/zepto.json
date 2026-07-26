@@ -1,0 +1,27 @@
+{
+  "platform": "zepto",
+  "mcp_endpoint": "https://mcp.zepto.co.in/mcp",
+  "baseline_source": "static extraction from backend/app/mcp/adapters/zepto.py — see tests/contracts/README.md",
+  "tools": [
+    {
+      "name": "list_order_history",
+      "params": [],
+      "used_in": "backend/app/mcp/adapters/zepto.py:39"
+    },
+    {
+      "name": "get_order_detail",
+      "params": ["orderId"],
+      "used_in": "backend/app/mcp/adapters/zepto.py:44"
+    },
+    {
+      "name": "get_past_order_items",
+      "params": [],
+      "used_in": "backend/app/mcp/adapters/zepto.py:104"
+    },
+    {
+      "name": "search_products",
+      "params": ["query"],
+      "used_in": "backend/app/mcp/adapters/zepto.py:127"
+    }
+  ]
+}

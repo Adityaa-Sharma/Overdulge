@@ -1,0 +1,22 @@
+{
+  "platform": "swiggy_instamart",
+  "mcp_endpoint": "https://mcp.swiggy.com/im",
+  "baseline_source": "static extraction from backend/app/mcp/adapters/swiggy_instamart.py — see tests/contracts/README.md",
+  "tools": [
+    {
+      "name": "get_orders",
+      "params": ["orderType"],
+      "used_in": "backend/app/mcp/adapters/swiggy_instamart.py:47"
+    },
+    {
+      "name": "your_go_to_items",
+      "params": [],
+      "used_in": "backend/app/mcp/adapters/swiggy_instamart.py:112"
+    },
+    {
+      "name": "search_products",
+      "params": ["query"],
+      "used_in": "backend/app/mcp/adapters/swiggy_instamart.py:135"
+    }
+  ]
+}
