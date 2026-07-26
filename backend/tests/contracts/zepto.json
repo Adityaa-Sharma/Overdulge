@@ -1,0 +1,26 @@
+{
+  "platform": "zepto",
+  "base_url": "https://mcp.zepto.co.in/mcp",
+  "tools": [
+    {
+      "name": "list_order_history",
+      "params": [],
+      "notes": "response: orders[] with orderId (summary only — no order date, resolved per-order below)"
+    },
+    {
+      "name": "get_order_detail",
+      "params": ["orderId"],
+      "notes": "response: orderId, status, orderedAt, grandTotal, itemTotal, fees, items[]"
+    },
+    {
+      "name": "get_past_order_items",
+      "params": [],
+      "notes": "response: items[] with productVariantId, name, frequencyRank, price"
+    },
+    {
+      "name": "search_products",
+      "params": ["query"],
+      "notes": "response: results[] with name, price, productVariantId"
+    }
+  ]
+}

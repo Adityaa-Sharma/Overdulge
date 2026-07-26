@@ -1,0 +1,21 @@
+{
+  "platform": "swiggy_instamart",
+  "base_url": "https://mcp.swiggy.com/im",
+  "tools": [
+    {
+      "name": "get_orders",
+      "params": ["orderType"],
+      "notes": "orderType is always the literal 'DASH' (BRD §2.7 — 'INSTAMART' silently returns empty); response: orders[] with orderId, status, createdAt, totalAmount, storeName, billDetails{itemTotal, deliveryFee}, items[]"
+    },
+    {
+      "name": "your_go_to_items",
+      "params": [],
+      "notes": "response: items[] with itemId, name, frequencyRank, price"
+    },
+    {
+      "name": "search_products",
+      "params": ["query"],
+      "notes": "response: results[] with itemId, name, price"
+    }
+  ]
+}

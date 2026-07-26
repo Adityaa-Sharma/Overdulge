@@ -1,0 +1,26 @@
+{
+  "platform": "swiggy_food",
+  "base_url": "https://mcp.swiggy.com/food",
+  "tools": [
+    {
+      "name": "get_addresses",
+      "params": [],
+      "notes": "response: addresses[] with id, addressTag, addressCategory, addressLine"
+    },
+    {
+      "name": "get_food_orders",
+      "params": ["addressId"],
+      "notes": "response: orders[] with orderId, orderStatus, orderTotal (₹-formatted string), restaurantName"
+    },
+    {
+      "name": "get_food_order_details",
+      "params": ["orderId"],
+      "notes": "response: order.orderedTime (naive IST wall-clock; the list view's own timestamp has no year)"
+    },
+    {
+      "name": "search_menu",
+      "params": ["query"],
+      "notes": "response: results[] with name, price, restaurantName, restaurantId"
+    }
+  ]
+}
