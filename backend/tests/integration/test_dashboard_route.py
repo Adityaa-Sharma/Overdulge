@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 import jwt
 import pytest
@@ -169,6 +170,11 @@ def test_get_dashboard_cancelled_orders_only_returns_has_data_true_with_zero_tot
 
 
 def test_get_dashboard_populated_fixture_matches_response_contract(fake_user_client):
+    # Anchored to the real current month (not a hardcoded calendar date) so this
+    # keeps passing regardless of when it runs — see #154. `this_month_paise`
+    # only requires `ordered_at >= month_start`, so day 1/2 of the current
+    # month is always valid, on any month length.
+    month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     orders = [
         {
             "id": "o1",
@@ -178,7 +184,7 @@ def test_get_dashboard_populated_fixture_matches_response_contract(fake_user_cli
             "address_label": "Home",
             "is_cancelled": False,
             "grand_total_paise": 50000,
-            "ordered_at": "2026-07-22T09:00:00Z",
+            "ordered_at": month_start.replace(day=2, hour=9).isoformat(),
         },
         {
             "id": "o2",
@@ -187,7 +193,7 @@ def test_get_dashboard_populated_fixture_matches_response_contract(fake_user_cli
             "address_id": None,
             "is_cancelled": False,
             "grand_total_paise": 30000,
-            "ordered_at": "2026-07-21T09:00:00Z",
+            "ordered_at": month_start.replace(day=1, hour=9).isoformat(),
         },
     ]
     order_items = [
