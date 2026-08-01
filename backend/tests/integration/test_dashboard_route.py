@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
@@ -50,6 +51,18 @@ def _make_token(*, user_id: str = "user-123") -> str:
         "exp": int(time.time()) + 3600,
     }
     return jwt.encode(payload, _PRIVATE_PEM, algorithm="RS256")
+
+
+def _this_month_timestamp(day_offset: int) -> str:
+    """Build an `ordered_at` string that falls within the real current
+    calendar month, `day_offset` days after the 1st, at 09:00 UTC. Anchoring
+    to the start of the actual current month (instead of a hardcoded
+    calendar date) keeps "this month" fixtures valid no matter what day the
+    suite runs on — every month has at least 28 days, so `day_offset` up to
+    a couple of days is always safe.
+    """
+    month_start = datetime.now(UTC).replace(day=1, hour=9, minute=0, second=0, microsecond=0)
+    return (month_start + timedelta(days=day_offset)).isoformat().replace("+00:00", "Z")
 
 
 @pytest.fixture(autouse=True)
@@ -178,7 +191,7 @@ def test_get_dashboard_populated_fixture_matches_response_contract(fake_user_cli
             "address_label": "Home",
             "is_cancelled": False,
             "grand_total_paise": 50000,
-            "ordered_at": "2026-07-22T09:00:00Z",
+            "ordered_at": _this_month_timestamp(1),
         },
         {
             "id": "o2",
@@ -187,7 +200,7 @@ def test_get_dashboard_populated_fixture_matches_response_contract(fake_user_cli
             "address_id": None,
             "is_cancelled": False,
             "grand_total_paise": 30000,
-            "ordered_at": "2026-07-21T09:00:00Z",
+            "ordered_at": _this_month_timestamp(0),
         },
     ]
     order_items = [
