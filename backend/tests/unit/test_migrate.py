@@ -15,6 +15,7 @@ from scripts.migrate import (
     discover_migrations,
     pending_migrations,
     require_database_url,
+    tenant_not_found_hint,
     unreachable_host_hint,
 )
 
@@ -113,6 +114,29 @@ def test_unreachable_host_hint_is_silent_when_already_using_the_pooler() -> None
 def test_unreachable_host_hint_is_silent_for_unrelated_failures() -> None:
     hint = unreachable_host_hint(
         "postgresql://postgres:pw@db.ref.supabase.co:5432/postgres",
+        "FATAL: password authentication failed for user",
+    )
+
+    assert hint is None
+
+
+def test_tenant_not_found_hint_explains_a_stale_pooler_project_ref() -> None:
+    """Supavisor's error says nothing about project-paused/stale-secret being
+    the cause, so a code regression is the wrong first guess without a hint.
+    """
+    hint = tenant_not_found_hint(
+        "postgresql://postgres.rcdfkejlpxeifcrpognm:pw@aws-1-ap-northeast-2"
+        ".pooler.supabase.com:5432/postgres",
+        "FATAL:  tenant or user postgres.rcdfkejlpxeifcrpognm not found",
+    )
+
+    assert hint is not None
+    assert "SUPABASE_DB_URL" in hint
+
+
+def test_tenant_not_found_hint_is_silent_for_unrelated_failures() -> None:
+    hint = tenant_not_found_hint(
+        "postgresql://postgres.ref:pw@aws-1-ap-northeast-2.pooler.supabase.com:5432/postgres",
         "FATAL: password authentication failed for user",
     )
 

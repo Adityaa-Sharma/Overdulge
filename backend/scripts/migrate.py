@@ -76,6 +76,30 @@ def unreachable_host_hint(url: str, error: str) -> str | None:
     )
 
 
+def tenant_not_found_hint(url: str, error: str) -> str | None:
+    """Explain a Supavisor "tenant/user not found" failure, when that is what happened.
+
+    Supavisor returns this when the project reference encoded in the pooler
+    username no longer resolves — typically because the Supabase project
+    behind `SUPABASE_DB_URL` was paused or deleted, or the secret itself is
+    stale (wrong project ref or password). It is never caused by anything in
+    this script or the migration files; say so here rather than leaving the
+    next person to suspect a code regression.
+    """
+    lowered = error.lower()
+    if "tenant" not in lowered or "not found" not in lowered:
+        return None
+    return (
+        "Supavisor rejected the connection: it doesn't recognise the project "
+        "reference in the pooler username. This means the Supabase project is "
+        "paused/deleted, or the SUPABASE_DB_URL secret is stale — not a code "
+        "or migration problem. Check Supabase > Project Settings for the "
+        "project's status, then refresh the SUPABASE_DB_URL secret with a "
+        "current connection string (Project Settings > Database > Connection "
+        "string > Session pooler) if the project ref or password changed."
+    )
+
+
 def require_database_url() -> str:
     url = os.environ.get("DATABASE_URL", "").strip()
     if not url:
@@ -122,7 +146,9 @@ def main() -> int:
     try:
         connect = psycopg.connect(database_url, autocommit=True)
     except psycopg.OperationalError as exc:
-        hint = unreachable_host_hint(database_url, str(exc))
+        hint = unreachable_host_hint(database_url, str(exc)) or tenant_not_found_hint(
+            database_url, str(exc)
+        )
         raise SystemExit(f"{exc}\n\n{hint}" if hint else str(exc)) from exc
 
     with connect as connection:
